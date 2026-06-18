@@ -1,65 +1,90 @@
-import Image from "next/image";
+import Link from "next/link";
+import { format } from "date-fns";
+import { getCurrentUserId } from "@/lib/auth";
+import { listProfiles } from "@/server/users";
+import { listLocations } from "@/server/locations";
+import { listEntries } from "@/server/entries";
+import { weekRange } from "@/lib/week";
+import { workedMinutes } from "@/lib/time";
+import { aggregate } from "@/lib/salary";
+import { CalendarHome } from "@/components/CalendarHome";
+import { SummaryCards } from "@/components/SummaryCards";
+import { LocationLegend } from "@/components/LocationLegend";
+import { ProfilePicker } from "@/components/ProfilePicker";
+import { logoutAction } from "./actions";
 
-export default function Home() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ profile?: string }>;
+}) {
+  const { profile } = await searchParams;
+  const currentUserId = await getCurrentUserId();
+  const profiles = await listProfiles();
+  const activeId = currentUserId ?? profile ?? profiles[0]?.id;
+
+  if (!activeId) {
+    return (
+      <div>
+        <p className="mb-4">Nog geen profiel. Voer de seed uit of maak een account aan.</p>
+        <Link href="/login" className="text-accent">Inloggen</Link>
+      </div>
+    );
+  }
+
+  const isOwner = currentUserId === activeId;
+  const locations = await listLocations(activeId);
+
+  const now = new Date();
+  const { start, end } = weekRange(now);
+  const weekEntries = await listEntries(activeId, {
+    from: format(start, "yyyy-MM-dd"),
+    to: format(end, "yyyy-MM-dd"),
+  });
+  const monthEntries = await listEntries(activeId, {
+    from: format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd"),
+    to: format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd"),
+  });
+  const allEntries = Array.from(
+    new Map([...weekEntries, ...monthEntries].map((e) => [e.id, e])).values(),
+  );
+
+  const locById = new Map(locations.map((l) => [l.id, l]));
+  const agg = aggregate(
+    weekEntries.map((e) => {
+      const l = locById.get(e.locationId)!;
+      return {
+        locationId: e.locationId, name: l.name, color: l.color,
+        hourlyRate: l.hourlyRate,
+        minutes: workedMinutes(e.startMinutes, e.endMinutes, e.breakMinutes),
+      };
+    }),
+  );
+  const workedDays = new Set(weekEntries.map((e) => e.date)).size;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-xl font-medium">Urenlijst</h1>
+        <div className="flex items-center gap-3 text-sm">
+          {!isOwner && <ProfilePicker profiles={profiles} activeId={activeId} />}
+          <Link href="/overzicht" className="text-accent">Overzicht</Link>
+          {isOwner ? (
+            <>
+              <Link href="/instellingen" className="text-accent">Instellingen</Link>
+              <form action={logoutAction}><button className="text-ink-soft">Uitloggen</button></form>
+            </>
+          ) : (
+            <Link href="/login" className="text-accent">Inloggen</Link>
+          )}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
+
+      <SummaryCards minutes={agg.total.minutes} cents={agg.total.cents}
+        workedDays={workedDays} showSalary={isOwner} />
+      <CalendarHome entries={allEntries} locations={locations}
+        canEdit={isOwner} showSalary={isOwner} />
+      <LocationLegend locations={locations} />
     </div>
   );
 }

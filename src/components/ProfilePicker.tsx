@@ -1,3 +1,5 @@
+"use client";
+
 import type { Profile } from "@/types";
 
 export function ProfilePicker({
