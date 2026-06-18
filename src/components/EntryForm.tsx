@@ -14,9 +14,10 @@ type Props = {
 
 const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
 const MINUTES = Array.from({ length: 60 }, (_, m) => String(m).padStart(2, "0"));
+const fieldCls =
+  "mt-1 w-full rounded-xl border border-surface-line bg-surface px-3 py-2.5 text-base";
 
-// 24-hour time picker (hour + minute selects). Avoids the native
-// <input type="time"> which shows AM/PM on 12-hour device locales.
+// 24-hour time picker (hour + minute selects) — no AM/PM regardless of locale.
 function TimeSelect({
   label,
   value,
@@ -27,31 +28,20 @@ function TimeSelect({
   onChange: (next: string) => void;
 }) {
   const [h, m] = value.split(":");
-  const selectClass = "w-full rounded-md border border-surface-line p-2";
   return (
-    <div className="flex-1 text-sm">
+    <div className="flex-1 text-sm text-ink-soft">
       {label}
-      <div className="mt-1 flex items-center gap-1">
-        <select
-          aria-label={`${label} uur`}
-          value={h}
+      <div className="mt-1 flex items-center gap-1.5">
+        <select aria-label={`${label} uur`} value={h}
           onChange={(e) => onChange(`${e.target.value}:${m}`)}
-          className={selectClass}
-        >
-          {HOURS.map((hh) => (
-            <option key={hh} value={hh}>{hh}</option>
-          ))}
+          className="w-full rounded-xl border border-surface-line bg-surface px-2 py-2.5 text-base text-ink">
+          {HOURS.map((hh) => <option key={hh} value={hh}>{hh}</option>)}
         </select>
-        <span aria-hidden="true">:</span>
-        <select
-          aria-label={`${label} minuten`}
-          value={m}
+        <span aria-hidden="true" className="text-ink-faint">:</span>
+        <select aria-label={`${label} minuten`} value={m}
           onChange={(e) => onChange(`${h}:${e.target.value}`)}
-          className={selectClass}
-        >
-          {MINUTES.map((mm) => (
-            <option key={mm} value={mm}>{mm}</option>
-          ))}
+          className="w-full rounded-xl border border-surface-line bg-surface px-2 py-2.5 text-base text-ink">
+          {MINUTES.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
         </select>
       </div>
     </div>
@@ -84,31 +74,39 @@ export function EntryForm({ date, locations, entry, onDone }: Props) {
   }
 
   return (
-    <form action={action} className="flex flex-col gap-3">
+    <form action={action} className="flex flex-col gap-4">
       {entry && <input type="hidden" name="id" value={entry.id} />}
       <input type="hidden" name="date" value={date} />
-      <label className="text-sm">Werklocatie
+
+      <label className="text-sm text-ink-soft">Werklocatie
         <select name="locationId" defaultValue={entry?.locationId ?? locations[0]?.id}
-          className="mt-1 w-full rounded-md border border-surface-line p-2">
+          className={`${fieldCls} text-ink`}>
           {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
       </label>
-      <div className="flex flex-col gap-3 sm:flex-row">
+
+      <div className="flex gap-3">
         <TimeSelect label="Begin" value={start} onChange={setStart} />
         <TimeSelect label="Eind" value={end} onChange={setEnd} />
-        <label className="flex-1 text-sm">Pauze (min)
+        <label className="w-24 text-sm text-ink-soft">Pauze
           <input value={brk} onChange={(e) => setBrk(e.target.value)} type="number" min={0} inputMode="numeric"
-            className="mt-1 w-full rounded-md border border-surface-line p-2" /></label>
+            className={fieldCls} /></label>
       </div>
-      <label className="text-sm">Opmerking
-        <textarea name="note" defaultValue={entry?.note ?? ""} rows={2}
-          className="mt-1 w-full rounded-md border border-surface-line p-2" /></label>
-      <div className="text-sm text-ink-soft">Totaal: <b>{preview}</b></div>
+
+      <label className="text-sm text-ink-soft">Opmerking
+        <textarea name="note" defaultValue={entry?.note ?? ""} rows={2} className={fieldCls} /></label>
+
+      <div className="flex items-center justify-between rounded-xl bg-surface-soft px-3 py-2.5 text-sm">
+        <span className="text-ink-soft">Totaal</span>
+        <span className="text-base font-semibold">{preview}</span>
+      </div>
+
       {error && <div className="text-sm text-red-600">{error}</div>}
-      <div className="flex gap-2">
-        <button type="submit" className="rounded-md bg-accent px-4 py-2 text-sm text-white">Opslaan</button>
+
+      <div className="flex flex-col gap-2">
+        <button type="submit" className="w-full rounded-xl bg-accent py-3 text-base font-medium text-white active:opacity-80">Opslaan</button>
         <button type="button" onClick={onDone}
-          className="rounded-md border border-surface-line px-4 py-2 text-sm">Annuleren</button>
+          className="w-full rounded-xl border border-surface-line py-3 text-base active:opacity-60">Annuleren</button>
       </div>
     </form>
   );

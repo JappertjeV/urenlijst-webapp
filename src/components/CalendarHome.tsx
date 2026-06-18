@@ -98,14 +98,14 @@ export function CalendarHome({
 
       {openDay && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
           onClick={closeDay}
           role="dialog"
           aria-modal="true"
           aria-label={`Uren op ${openDayLabel}`}
         >
           <div
-            className="my-4 w-full max-w-lg rounded-card border border-surface-line bg-surface p-4 shadow-xl"
+            className="pb-safe max-h-[90svh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-surface-line bg-surface p-4 shadow-lg sm:max-h-[85svh] sm:rounded-card"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between gap-3">

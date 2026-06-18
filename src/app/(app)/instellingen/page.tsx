@@ -22,8 +22,8 @@ export default async function InstellingenPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="mb-4 text-xl font-medium">Instellingen</h1>
-        <h2 className="mb-3 text-lg font-medium">Werklocaties</h2>
+        <h1 className="mb-4 text-[28px] font-bold leading-tight">Instellingen</h1>
+        <h2 className="mb-2 px-1 text-[13px] font-medium uppercase tracking-wide text-ink-faint">Werklocaties</h2>
         <LocationManager locations={locations} ratesByLocation={ratesByLocation} />
       </div>
       {profile && <AccountSettings name={profile.name} username={profile.username} />}

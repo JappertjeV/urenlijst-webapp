@@ -10,7 +10,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#534ab7",
+  viewportFit: "cover", // extend under the notch / home indicator; we pad with safe-area insets
+  themeColor: "#f7f6f2",
 };
 
 export default function RootLayout({
@@ -20,8 +21,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="nl">
-      <body className="min-h-screen">
-        <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+      <body>
+        <main className="mx-auto w-full max-w-2xl px-4 py-5">{children}</main>
       </body>
     </html>
   );
