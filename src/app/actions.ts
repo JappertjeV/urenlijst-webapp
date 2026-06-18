@@ -12,6 +12,8 @@ import {
   createLocation,
   updateLocation,
   archiveLocation,
+  addLocationRate,
+  deleteLocationRate,
 } from "@/server/locations";
 import { createUser, changePassword } from "@/server/users";
 
@@ -75,12 +77,14 @@ export async function saveEntryAction(formData: FormData) {
   if (id) await updateEntry(userId, id, input);
   else await createEntry(userId, input);
   revalidatePath("/");
+  revalidatePath("/kalender");
 }
 
 export async function deleteEntryAction(formData: FormData) {
   const userId = await requireUser();
   await deleteEntry(userId, str(formData, "id"));
   revalidatePath("/");
+  revalidatePath("/kalender");
 }
 
 export async function saveLocationAction(formData: FormData) {
@@ -99,5 +103,22 @@ export async function saveLocationAction(formData: FormData) {
 export async function archiveLocationAction(formData: FormData) {
   const userId = await requireUser();
   await archiveLocation(userId, str(formData, "id"));
+  revalidatePath("/instellingen");
+}
+
+export async function addRateAction(formData: FormData) {
+  const userId = await requireUser();
+  await addLocationRate(
+    userId,
+    str(formData, "locationId"),
+    Math.round(num(formData, "hourlyRateEuros") * 100),
+    str(formData, "validFrom"),
+  );
+  revalidatePath("/instellingen");
+}
+
+export async function deleteRateAction(formData: FormData) {
+  const userId = await requireUser();
+  await deleteLocationRate(userId, str(formData, "id"));
   revalidatePath("/instellingen");
 }

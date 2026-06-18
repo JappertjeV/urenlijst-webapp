@@ -34,9 +34,9 @@ export function DayDetail({ date, entries, locations, canEdit, showSalary, onEdi
             </span>
             <span className="flex-1 truncate text-sm text-ink-soft">{e.note ?? ""}</span>
             <span className="text-sm font-medium">{formatHours(mins)}</span>
-            {showSalary && loc && (
+            {showSalary && e.rateCents != null && (
               <span className="w-20 text-right text-sm font-medium">
-                {formatEUR(salaryCents(mins, loc.hourlyRate))}
+                {formatEUR(salaryCents(mins, e.rateCents))}
               </span>
             )}
             {canEdit && (

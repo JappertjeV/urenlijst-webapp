@@ -18,15 +18,27 @@ model User {
 }
 
 model Location {
-  id         String   @id @default(cuid())
+  id         String         @id @default(cuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   color      String
-  hourlyRate Int
-  archived   Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  hourlyRate Int // begintarief (centen) — geldt tot de eerste LocationRate-wijziging
+  archived   Boolean        @default(false)
+  createdAt  DateTime       @default(now())
   entries    Entry[]
+  rates      LocationRate[]
+}
+
+model LocationRate {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  hourlyRate Int // centen
+  validFrom  DateTime // dag waarop dit tarief ingaat
+  createdAt  DateTime @default(now())
+
+  @@unique([locationId, validFrom])
 }
 
 model Entry {
