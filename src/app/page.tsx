@@ -2,11 +2,12 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { getCurrentUserId } from "@/lib/auth";
 import { listProfiles } from "@/server/users";
-import { listLocations, listAllLocations } from "@/server/locations";
+import { listLocations, listAllLocations, getRateChangesByLocation } from "@/server/locations";
 import { listEntries } from "@/server/entries";
 import { weekRange } from "@/lib/week";
 import { workedMinutes } from "@/lib/time";
 import { aggregate } from "@/lib/salary";
+import { rateForDate } from "@/lib/rates";
 import { CalendarHome } from "@/components/CalendarHome";
 import { SummaryCards } from "@/components/SummaryCards";
 import { LocationLegend } from "@/components/LocationLegend";
@@ -59,6 +60,14 @@ export default async function HomePage({
   );
 
   const locById = new Map(allLocations.map((l) => [l.id, l]));
+  const rateChanges = await getRateChangesByLocation(activeId);
+  const rateOf = (e: { locationId: string; date: string }) =>
+    rateForDate(
+      locById.get(e.locationId)?.hourlyRate ?? 0,
+      rateChanges.get(e.locationId) ?? [],
+      e.date,
+    );
+
   const agg = aggregate(
     weekEntries
       .filter((e) => locById.has(e.locationId))
@@ -66,12 +75,17 @@ export default async function HomePage({
         const l = locById.get(e.locationId)!;
         return {
           locationId: e.locationId, name: l.name, color: l.color,
-          hourlyRate: l.hourlyRate,
+          hourlyRate: rateOf(e),
           minutes: workedMinutes(e.startMinutes, e.endMinutes, e.breakMinutes),
         };
       }),
   );
   const workedDays = new Set(weekEntries.map((e) => e.date)).size;
+
+  // Attach the date-applicable rate to each entry, owner-only (no salary leak).
+  const ratedEntries = isOwner
+    ? allEntries.map((e) => ({ ...e, rateCents: rateOf(e) }))
+    : allEntries;
 
   return (
     <div>
@@ -96,7 +110,7 @@ export default async function HomePage({
 
       <SummaryCards minutes={agg.total.minutes} cents={agg.total.cents}
         workedDays={workedDays} showSalary={isOwner} />
-      <CalendarHome entries={allEntries} locations={clientLocations}
+      <CalendarHome entries={ratedEntries} locations={clientLocations}
         editableLocations={editableLocations} canEdit={isOwner} showSalary={isOwner} />
       <LocationLegend locations={editableLocations} />
     </div>
