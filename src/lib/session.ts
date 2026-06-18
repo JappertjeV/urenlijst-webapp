@@ -14,6 +14,10 @@ export const sessionOptions: SessionOptions = {
 };
 
 export async function getSession() {
+  // Read cookies first: during static prerendering this makes Next bail the
+  // route out to dynamic rendering before we touch SESSION_SECRET, which is
+  // absent at build time (so the build does not fail in Docker / CI).
+  const cookieStore = await cookies();
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < 32) {
     throw new Error(
@@ -21,5 +25,5 @@ export async function getSession() {
         "Genereer er een met: openssl rand -base64 32",
     );
   }
-  return getIronSession<SessionData>(await cookies(), sessionOptions);
+  return getIronSession<SessionData>(cookieStore, sessionOptions);
 }
