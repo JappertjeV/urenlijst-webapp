@@ -54,7 +54,7 @@ export default async function OverzichtPage({
 
   return (
     <div>
-      <h1 className="mb-4 text-xl font-medium">Overzicht</h1>
+      <h1 className="mb-4 text-[28px] font-bold leading-tight">Overzicht</h1>
       <div className="grid gap-4 sm:grid-cols-2">
         {sections.map(({ period, agg }) => (
           <SalaryOverview key={period} period={period} aggregation={agg} showSalary={isOwner} />
