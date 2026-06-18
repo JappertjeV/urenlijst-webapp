@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { resetDb } from "../helpers/db";
 import {
   listLocations,
+  listAllLocations,
   createLocation,
   updateLocation,
   archiveLocation,
@@ -32,10 +33,14 @@ describe("locations data access", () => {
     expect(list[0].name).toBe("Kantoor");
   });
 
-  it("hides archived locations", async () => {
+  it("hides archived locations from the active list but keeps them in the full list", async () => {
     const loc = await createLocation(userId, { name: "Oud", color: "#000", hourlyRate: 1000 });
     await archiveLocation(userId, loc.id);
     expect(await listLocations(userId)).toHaveLength(0);
+    // listAllLocations must still return it so existing entries can resolve it
+    const all = await listAllLocations(userId);
+    expect(all).toHaveLength(1);
+    expect(all[0].name).toBe("Oud");
   });
 
   it("refuses to update another user's location", async () => {

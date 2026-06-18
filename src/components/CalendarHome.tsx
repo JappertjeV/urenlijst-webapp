@@ -16,12 +16,19 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 type Props = {
   entries: EntryDTO[];
-  locations: LocationDTO[];
+  locations: LocationDTO[]; // all locations (incl. archived) — for rendering entries
+  editableLocations: LocationDTO[]; // active locations — for the new/edit entry form
   canEdit: boolean;
   showSalary: boolean;
 };
 
-export function CalendarHome({ entries, locations, canEdit, showSalary }: Props) {
+export function CalendarHome({
+  entries,
+  locations,
+  editableLocations,
+  canEdit,
+  showSalary,
+}: Props) {
   const [anchor, setAnchor] = useState(new Date());
   const [view, setView] = useState<"week" | "month" | "day">("week");
   const [openDay, setOpenDay] = useState<string | null>(null);
@@ -110,7 +117,7 @@ export function CalendarHome({ entries, locations, canEdit, showSalary }: Props)
               </button>
             </div>
             {(adding || editing) ? (
-              <EntryForm date={openDay} locations={locations} entry={editing ?? undefined}
+              <EntryForm date={openDay} locations={editableLocations} entry={editing ?? undefined}
                 onDone={() => { setAdding(false); setEditing(null); }} />
             ) : (
               <>

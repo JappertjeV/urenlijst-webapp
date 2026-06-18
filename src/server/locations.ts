@@ -9,6 +9,16 @@ export async function listLocations(userId: string): Promise<LocationDTO[]> {
   });
 }
 
+// Includes archived locations — needed to resolve the location of existing
+// entries (an entry can reference a location that was archived later).
+export async function listAllLocations(userId: string): Promise<LocationDTO[]> {
+  return prisma.location.findMany({
+    where: { userId },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, color: true, hourlyRate: true },
+  });
+}
+
 export async function createLocation(
   userId: string,
   data: { name: string; color: string; hourlyRate: number },

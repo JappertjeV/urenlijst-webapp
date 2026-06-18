@@ -2,7 +2,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { getCurrentUserId } from "@/lib/auth";
 import { listProfiles } from "@/server/users";
-import { listLocations } from "@/server/locations";
+import { listLocations, listAllLocations } from "@/server/locations";
 import { listEntries } from "@/server/entries";
 import { weekRange } from "@/lib/week";
 import { workedMinutes } from "@/lib/time";
@@ -33,12 +33,16 @@ export default async function HomePage({
   }
 
   const isOwner = currentUserId === activeId;
-  const locations = await listLocations(activeId);
+  // Active locations drive the new-entry form; all locations (incl. archived)
+  // are needed to render/aggregate entries whose location was archived later.
+  const activeLocations = await listLocations(activeId);
+  const allLocations = await listAllLocations(activeId);
   // hourlyRate is salary data: never serialize it to the client for non-owners
   // (client components leak their props into the RSC payload).
-  const clientLocations = isOwner
-    ? locations
-    : locations.map((l) => ({ ...l, hourlyRate: 0 }));
+  const strip = (ls: typeof allLocations) =>
+    isOwner ? ls : ls.map((l) => ({ ...l, hourlyRate: 0 }));
+  const clientLocations = strip(allLocations);
+  const editableLocations = strip(activeLocations);
 
   const now = new Date();
   const { start, end } = weekRange(now);
@@ -54,16 +58,18 @@ export default async function HomePage({
     new Map([...weekEntries, ...monthEntries].map((e) => [e.id, e])).values(),
   );
 
-  const locById = new Map(locations.map((l) => [l.id, l]));
+  const locById = new Map(allLocations.map((l) => [l.id, l]));
   const agg = aggregate(
-    weekEntries.map((e) => {
-      const l = locById.get(e.locationId)!;
-      return {
-        locationId: e.locationId, name: l.name, color: l.color,
-        hourlyRate: l.hourlyRate,
-        minutes: workedMinutes(e.startMinutes, e.endMinutes, e.breakMinutes),
-      };
-    }),
+    weekEntries
+      .filter((e) => locById.has(e.locationId))
+      .map((e) => {
+        const l = locById.get(e.locationId)!;
+        return {
+          locationId: e.locationId, name: l.name, color: l.color,
+          hourlyRate: l.hourlyRate,
+          minutes: workedMinutes(e.startMinutes, e.endMinutes, e.breakMinutes),
+        };
+      }),
   );
   const workedDays = new Set(weekEntries.map((e) => e.date)).size;
 
@@ -91,8 +97,8 @@ export default async function HomePage({
       <SummaryCards minutes={agg.total.minutes} cents={agg.total.cents}
         workedDays={workedDays} showSalary={isOwner} />
       <CalendarHome entries={allEntries} locations={clientLocations}
-        canEdit={isOwner} showSalary={isOwner} />
-      <LocationLegend locations={clientLocations} />
+        editableLocations={editableLocations} canEdit={isOwner} showSalary={isOwner} />
+      <LocationLegend locations={editableLocations} />
     </div>
   );
 }

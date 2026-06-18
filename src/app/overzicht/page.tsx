@@ -2,7 +2,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { getCurrentUserId } from "@/lib/auth";
 import { listProfiles } from "@/server/users";
-import { listLocations } from "@/server/locations";
+import { listAllLocations } from "@/server/locations";
 import { listEntries } from "@/server/entries";
 import { dayRange, weekRange, monthRange, yearRange } from "@/lib/week";
 import { workedMinutes } from "@/lib/time";
@@ -24,7 +24,7 @@ export default async function OverzichtPage({
   if (!activeId) return <p>Geen profiel.</p>;
 
   const isOwner = currentUserId === activeId;
-  const locations = await listLocations(activeId);
+  const locations = await listAllLocations(activeId);
   const locById = new Map(locations.map((l) => [l.id, l]));
   const now = new Date();
 
@@ -36,14 +36,16 @@ export default async function OverzichtPage({
         to: format(end, "yyyy-MM-dd"),
       });
       const agg = aggregate(
-        entries.map((e) => {
-          const l = locById.get(e.locationId)!;
-          return {
-            locationId: e.locationId, name: l.name, color: l.color,
-            hourlyRate: l.hourlyRate,
-            minutes: workedMinutes(e.startMinutes, e.endMinutes, e.breakMinutes),
-          };
-        }),
+        entries
+          .filter((e) => locById.has(e.locationId))
+          .map((e) => {
+            const l = locById.get(e.locationId)!;
+            return {
+              locationId: e.locationId, name: l.name, color: l.color,
+              hourlyRate: l.hourlyRate,
+              minutes: workedMinutes(e.startMinutes, e.endMinutes, e.breakMinutes),
+            };
+          }),
       );
       return { period, agg };
     }),
