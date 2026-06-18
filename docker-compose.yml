@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "file:/data/urenlijst.db"
+      SESSION_SECRET: "${SESSION_SECRET:?set SESSION_SECRET in .env}"
+      SEED_ON_START: "${SEED_ON_START:-false}"
+    volumes:
+      - urenlijst-data:/data
+    restart: unless-stopped
+
+volumes:
+  urenlijst-data:
