@@ -9,7 +9,12 @@ export const sessionOptions: SessionOptions = {
   cookieOptions: {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // Secure cookies require HTTPS. On a plain-HTTP homelab set
+    // ALLOW_INSECURE_COOKIE=true, otherwise the browser drops the session
+    // cookie and login silently never "sticks".
+    secure:
+      process.env.NODE_ENV === "production" &&
+      process.env.ALLOW_INSECURE_COOKIE !== "true",
   },
 };
 
