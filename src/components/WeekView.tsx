@@ -33,7 +33,7 @@ export function WeekView({ anchor, entries, locations, onDayClick }: Props) {
   for (let m = axisStart; m <= axisEnd; m += 60) hours.push(m);
 
   return (
-    <div className="overflow-x-auto">
+    <div className="scroll-x">
       <div className="min-w-[680px]">
         {/* header row: weekday, date, day total */}
         <div className="mb-1 flex">

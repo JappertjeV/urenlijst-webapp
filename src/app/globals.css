@@ -37,12 +37,15 @@ textarea {
   font-size: 16px;
 }
 
-/* contained horizontal scroll regions (e.g. the week grid) keep momentum and
-   don't bounce the whole page */
+/* contained horizontal scroll regions (e.g. the week grid): pan horizontally
+   here, but let vertical drags scroll the page (no trapped vertical gestures),
+   keep momentum, and don't bounce the whole page */
 .scroll-x {
   overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
 }
 
 /* press feedback instead of hover on touch devices */
