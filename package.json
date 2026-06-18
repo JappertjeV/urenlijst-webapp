@@ -11,7 +11,7 @@
     "test:watch": "vitest",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
-    "test:dbsetup": "DATABASE_URL=file:./prisma/test.db prisma db push --force-reset --skip-generate"
+    "test:dbsetup": "DATABASE_URL=file:./prisma/test.db prisma db push --skip-generate"
   },
   "prisma": {
     "seed": "node prisma/seed.mjs"

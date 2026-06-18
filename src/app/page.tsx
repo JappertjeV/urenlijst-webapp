@@ -34,6 +34,11 @@ export default async function HomePage({
 
   const isOwner = currentUserId === activeId;
   const locations = await listLocations(activeId);
+  // hourlyRate is salary data: never serialize it to the client for non-owners
+  // (client components leak their props into the RSC payload).
+  const clientLocations = isOwner
+    ? locations
+    : locations.map((l) => ({ ...l, hourlyRate: 0 }));
 
   const now = new Date();
   const { start, end } = weekRange(now);
@@ -82,9 +87,9 @@ export default async function HomePage({
 
       <SummaryCards minutes={agg.total.minutes} cents={agg.total.cents}
         workedDays={workedDays} showSalary={isOwner} />
-      <CalendarHome entries={allEntries} locations={locations}
+      <CalendarHome entries={allEntries} locations={clientLocations}
         canEdit={isOwner} showSalary={isOwner} />
-      <LocationLegend locations={locations} />
+      <LocationLegend locations={clientLocations} />
     </div>
   );
 }

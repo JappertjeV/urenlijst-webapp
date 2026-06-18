@@ -14,5 +14,12 @@ export const sessionOptions: SessionOptions = {
 };
 
 export async function getSession() {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      "SESSION_SECRET ontbreekt of is te kort (minimaal 32 tekens). " +
+        "Genereer er een met: openssl rand -base64 32",
+    );
+  }
   return getIronSession<SessionData>(await cookies(), sessionOptions);
 }
