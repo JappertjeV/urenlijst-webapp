@@ -37,15 +37,15 @@ textarea {
   font-size: 16px;
 }
 
-/* contained horizontal scroll regions (e.g. the week grid): pan horizontally
-   here, but let vertical drags scroll the page (no trapped vertical gestures),
-   keep momentum, and don't bounce the whole page */
+/* contained horizontal scroll regions (e.g. the week grid): scroll only
+   horizontally; overflow-y:hidden (not auto) means vertical drags are NOT
+   captured here and scroll the page instead. Do NOT set touch-action:pan-x —
+   that would block vertical page scrolling for touches starting on the grid. */
 .scroll-x {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
 }
 
 /* press feedback instead of hover on touch devices */
