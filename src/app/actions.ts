@@ -14,6 +14,13 @@ import {
   archiveLocation,
 } from "@/server/locations";
 import { createUser } from "@/server/users";
+import {
+  connectICloud,
+  listICloudCalendars,
+  selectICloudCalendar,
+  disconnectICloud,
+  uploadHours,
+} from "@/server/icloud";
 
 async function requireUser(): Promise<string> {
   const userId = await getCurrentUserId();
@@ -91,4 +98,35 @@ export async function archiveLocationAction(formData: FormData) {
   const userId = await requireUser();
   await archiveLocation(userId, str(formData, "id"));
   revalidatePath("/instellingen");
+}
+
+export async function connectICloudAction(formData: FormData) {
+  const userId = await requireUser();
+  return connectICloud(userId, str(formData, "appleId"), str(formData, "appPassword"));
+}
+
+export async function listICloudCalendarsAction() {
+  const userId = await requireUser();
+  return listICloudCalendars(userId);
+}
+
+export async function selectICloudCalendarAction(formData: FormData) {
+  const userId = await requireUser();
+  await selectICloudCalendar(
+    userId,
+    str(formData, "calendarUrl"),
+    str(formData, "calendarName"),
+  );
+  revalidatePath("/instellingen");
+}
+
+export async function disconnectICloudAction() {
+  const userId = await requireUser();
+  await disconnectICloud(userId);
+  revalidatePath("/instellingen");
+}
+
+export async function uploadHoursAction() {
+  const userId = await requireUser();
+  return uploadHours(userId);
 }
