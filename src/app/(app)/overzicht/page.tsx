@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { format } from "date-fns";
 import { getCurrentUserId } from "@/lib/auth";
 import { listProfiles } from "@/server/users";
@@ -55,10 +54,7 @@ export default async function OverzichtPage({
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-medium">Overzicht</h1>
-        <Link href="/" className="text-sm text-accent">← Kalender</Link>
-      </div>
+      <h1 className="mb-4 text-xl font-medium">Overzicht</h1>
       <div className="grid gap-4 sm:grid-cols-2">
         {sections.map(({ period, agg }) => (
           <SalaryOverview key={period} period={period} aggregation={agg} showSalary={isOwner} />

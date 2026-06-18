@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth";
 import { listLocations, listLocationRates } from "@/server/locations";
@@ -23,10 +22,7 @@ export default async function InstellingenPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-xl font-medium">Instellingen</h1>
-          <Link href="/" className="text-sm text-accent">← Kalender</Link>
-        </div>
+        <h1 className="mb-4 text-xl font-medium">Instellingen</h1>
         <h2 className="mb-3 text-lg font-medium">Werklocaties</h2>
         <LocationManager locations={locations} ratesByLocation={ratesByLocation} />
       </div>

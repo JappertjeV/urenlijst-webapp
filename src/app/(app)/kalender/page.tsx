@@ -11,8 +11,6 @@ import { rateForDate } from "@/lib/rates";
 import { CalendarHome } from "@/components/CalendarHome";
 import { SummaryCards } from "@/components/SummaryCards";
 import { LocationLegend } from "@/components/LocationLegend";
-import { ProfilePicker } from "@/components/ProfilePicker";
-import { logoutAction } from "./actions";
 
 export default async function HomePage({
   searchParams,
@@ -89,25 +87,6 @@ export default async function HomePage({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-medium">Urenlijst</h1>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          {!isOwner && <ProfilePicker profiles={profiles} activeId={activeId} />}
-          <Link href="/overzicht" className="text-accent">Overzicht</Link>
-          {isOwner ? (
-            <>
-              <Link href="/instellingen" className="text-accent">Instellingen</Link>
-              <form action={logoutAction}><button className="text-ink-soft">Uitloggen</button></form>
-            </>
-          ) : (
-            <>
-              <Link href="/login" className="text-accent">Inloggen</Link>
-              <Link href="/register" className="text-accent">Account aanmaken</Link>
-            </>
-          )}
-        </div>
-      </div>
-
       <SummaryCards minutes={agg.total.minutes} cents={agg.total.cents}
         workedDays={workedDays} showSalary={isOwner} />
       <CalendarHome entries={ratedEntries} locations={clientLocations}

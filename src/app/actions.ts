@@ -77,12 +77,14 @@ export async function saveEntryAction(formData: FormData) {
   if (id) await updateEntry(userId, id, input);
   else await createEntry(userId, input);
   revalidatePath("/");
+  revalidatePath("/kalender");
 }
 
 export async function deleteEntryAction(formData: FormData) {
   const userId = await requireUser();
   await deleteEntry(userId, str(formData, "id"));
   revalidatePath("/");
+  revalidatePath("/kalender");
 }
 
 export async function saveLocationAction(formData: FormData) {
