@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { addWeeks, addMonths, format } from "date-fns";
+import { addDays, addWeeks, addMonths, format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { isoWeekNumber, weekRange } from "@/lib/week";
 import { CalendarHeader } from "./CalendarHeader";
 import { WeekView } from "./WeekView";
 import { MonthView } from "./MonthView";
+import { DayView } from "./DayView";
 import { EntryForm } from "./EntryForm";
 import { DayDetail } from "./DayDetail";
 import type { EntryDTO, LocationDTO } from "@/types";
@@ -20,19 +21,29 @@ type Props = {
 
 export function CalendarHome({ entries, locations, canEdit, showSalary }: Props) {
   const [anchor, setAnchor] = useState(new Date());
-  const [view, setView] = useState<"week" | "month">("week");
+  const [view, setView] = useState<"week" | "month" | "day">("week");
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [editing, setEditing] = useState<EntryDTO | null>(null);
   const [adding, setAdding] = useState(false);
 
   const title = useMemo(() => {
     if (view === "month") return format(anchor, "LLLL yyyy", { locale: nl });
+    if (view === "day") {
+      const s = format(anchor, "EEEE d MMMM yyyy", { locale: nl });
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
     const { start, end } = weekRange(anchor);
     return `${format(start, "d", { locale: nl })}–${format(end, "d MMMM yyyy", { locale: nl })} · wk ${isoWeekNumber(anchor)}`;
   }, [anchor, view]);
 
   const step = (dir: number) =>
-    setAnchor((d) => (view === "week" ? addWeeks(d, dir) : addMonths(d, dir)));
+    setAnchor((d) =>
+      view === "week"
+        ? addWeeks(d, dir)
+        : view === "month"
+          ? addMonths(d, dir)
+          : addDays(d, dir),
+    );
 
   const dayEntries = (date: string) => entries.filter((e) => e.date === date);
 
@@ -47,8 +58,10 @@ export function CalendarHome({ entries, locations, canEdit, showSalary }: Props)
       />
       {view === "week" ? (
         <WeekView anchor={anchor} entries={entries} locations={locations} onDayClick={setOpenDay} />
-      ) : (
+      ) : view === "month" ? (
         <MonthView anchor={anchor} entries={entries} locations={locations} onDayClick={setOpenDay} />
+      ) : (
+        <DayView anchor={anchor} entries={entries} locations={locations} onDayClick={setOpenDay} />
       )}
 
       {openDay && (

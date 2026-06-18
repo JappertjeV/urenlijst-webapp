@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Urenlijst">
+  <defs>
+    <clipPath id="body"><rect x="120" y="150" width="272" height="236" rx="28"/></clipPath>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="#534ab7"/>
+  <g clip-path="url(#body)">
+    <rect x="120" y="150" width="272" height="236" fill="#ffffff"/>
+    <rect x="120" y="150" width="272" height="58" fill="#534ab7"/>
+  </g>
+  <rect x="174" y="124" width="22" height="54" rx="11" fill="#ffffff"/>
+  <rect x="316" y="124" width="22" height="54" rx="11" fill="#ffffff"/>
+  <g fill="#534ab7">
+    <circle cx="176" cy="258" r="15"/>
+    <circle cx="236" cy="258" r="15"/>
+    <circle cx="296" cy="258" r="15"/>
+    <circle cx="356" cy="258" r="15"/>
+    <circle cx="176" cy="318" r="15"/>
+    <circle cx="236" cy="318" r="15"/>
+    <circle cx="296" cy="318" r="15"/>
+  </g>
+</svg>

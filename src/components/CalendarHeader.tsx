@@ -1,9 +1,17 @@
+type View = "month" | "week" | "day";
+
+const VIEW_LABELS: Record<View, string> = {
+  month: "Maand",
+  week: "Week",
+  day: "Dag",
+};
+
 type Props = {
   title: string;
-  view: "week" | "month";
+  view: View;
   onPrev: () => void;
   onNext: () => void;
-  onView: (v: "week" | "month") => void;
+  onView: (v: View) => void;
   onAdd: () => void;
   canAdd: boolean;
 };
@@ -22,10 +30,10 @@ export function CalendarHeader({
       </div>
       <div className="flex items-center gap-2">
         <div className="flex overflow-hidden rounded-md border border-surface-line text-sm">
-          {(["month", "week"] as const).map((v) => (
+          {(["month", "week", "day"] as const).map((v) => (
             <button key={v} onClick={() => onView(v)}
               className={view === v ? "bg-surface-soft px-3 py-1.5" : "px-3 py-1.5 text-ink-soft"}>
-              {v === "month" ? "Maand" : "Week"}
+              {VIEW_LABELS[v]}
             </button>
           ))}
         </div>

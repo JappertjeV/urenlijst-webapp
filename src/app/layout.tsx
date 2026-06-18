@@ -1,9 +1,16 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Urenlijst",
   description: "Uren bijhouden per werklocatie",
+  appleWebApp: { capable: true, title: "Urenlijst", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#534ab7",
 };
 
 export default function RootLayout({
