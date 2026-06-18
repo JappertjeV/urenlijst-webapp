@@ -69,9 +69,9 @@ export default async function HomePage({
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-medium">Urenlijst</h1>
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           {!isOwner && <ProfilePicker profiles={profiles} activeId={activeId} />}
           <Link href="/overzicht" className="text-accent">Overzicht</Link>
           {isOwner ? (
@@ -80,7 +80,10 @@ export default async function HomePage({
               <form action={logoutAction}><button className="text-ink-soft">Uitloggen</button></form>
             </>
           ) : (
-            <Link href="/login" className="text-accent">Inloggen</Link>
+            <>
+              <Link href="/login" className="text-accent">Inloggen</Link>
+              <Link href="/register" className="text-accent">Account aanmaken</Link>
+            </>
           )}
         </div>
       </div>

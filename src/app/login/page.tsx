@@ -24,6 +24,9 @@ export default function LoginPage() {
         {error && <div className="text-sm text-red-600">{error}</div>}
         <button className="rounded-md bg-accent px-4 py-2 text-sm text-white">Inloggen</button>
       </form>
+      <a href="/register" className="mt-4 inline-block text-sm text-accent">
+        Nog geen account? Account aanmaken
+      </a>
     </div>
   );
 }

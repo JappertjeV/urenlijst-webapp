@@ -13,6 +13,7 @@ import {
   updateLocation,
   archiveLocation,
 } from "@/server/locations";
+import { createUser } from "@/server/users";
 
 async function requireUser(): Promise<string> {
   const userId = await getCurrentUserId();
@@ -28,8 +29,21 @@ function str(form: FormData, key: string): string {
 }
 
 export async function loginAction(formData: FormData) {
-  const ok = await login(str(formData, "username"), str(formData, "password"));
+  const username = str(formData, "username").trim().toLowerCase();
+  const ok = await login(username, str(formData, "password"));
   if (!ok) return { error: "Onjuiste gebruikersnaam of wachtwoord." };
+  redirect("/");
+}
+
+export async function registerAction(formData: FormData) {
+  const username = str(formData, "username").trim().toLowerCase();
+  const result = await createUser({
+    name: str(formData, "name"),
+    username,
+    password: str(formData, "password"),
+  });
+  if (!result.ok) return { error: result.error };
+  await login(username, str(formData, "password"));
   redirect("/");
 }
 
