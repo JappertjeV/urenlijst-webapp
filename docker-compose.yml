@@ -1,15 +1,24 @@
 services:
   app:
     build: .
+    image: urenlijst-webapp
+    container_name: urenlijst
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: "file:/data/urenlijst.db"
-      SESSION_SECRET: "${SESSION_SECRET:?set SESSION_SECRET in .env}"
+      SESSION_SECRET: "${SESSION_SECRET:?Zet SESSION_SECRET in .env (genereer met: openssl rand -base64 32)}"
+      # Zet op true bij de allereerste start om een demo-profiel (jasper/demo1234) te seeden.
       SEED_ON_START: "${SEED_ON_START:-false}"
     volumes:
       - urenlijst-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
 volumes:
   urenlijst-data:
