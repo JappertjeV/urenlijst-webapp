@@ -1,11 +1,18 @@
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, verifyPassword } from "@/lib/auth";
 import type { Profile } from "@/types";
 
 export async function listProfiles(): Promise<Profile[]> {
   return prisma.user.findMany({
     select: { id: true, name: true, username: true },
     orderBy: { name: "asc" },
+  });
+}
+
+export async function getProfile(userId: string): Promise<Profile | null> {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, username: true },
   });
 }
 
@@ -44,4 +51,26 @@ export async function createUser(input: {
     data: { name, username, passwordHash },
   });
   return { ok: true, id: user.id };
+}
+
+export type ChangePasswordResult = { ok: true } | { ok: false; error: string };
+
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<ChangePasswordResult> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return { ok: false, error: "Gebruiker niet gevonden." };
+  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+    return { ok: false, error: "Huidig wachtwoord klopt niet." };
+  }
+  if (newPassword.length < 6) {
+    return { ok: false, error: "Nieuw wachtwoord moet minimaal 6 tekens zijn." };
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await hashPassword(newPassword) },
+  });
+  return { ok: true };
 }

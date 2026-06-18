@@ -13,7 +13,7 @@ import {
   updateLocation,
   archiveLocation,
 } from "@/server/locations";
-import { createUser } from "@/server/users";
+import { createUser, changePassword } from "@/server/users";
 
 async function requireUser(): Promise<string> {
   const userId = await getCurrentUserId();
@@ -50,6 +50,15 @@ export async function registerAction(formData: FormData) {
 export async function logoutAction() {
   await logout();
   redirect("/");
+}
+
+export async function changePasswordAction(formData: FormData) {
+  const userId = await requireUser();
+  return changePassword(
+    userId,
+    str(formData, "currentPassword"),
+    str(formData, "newPassword"),
+  );
 }
 
 export async function saveEntryAction(formData: FormData) {
