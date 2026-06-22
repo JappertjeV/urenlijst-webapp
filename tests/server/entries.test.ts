@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { resetDb } from "../helpers/db";
-import { listEntries, createEntry, deleteEntry } from "@/server/entries";
+import { listEntries, createEntry, updateEntry, deleteEntry } from "@/server/entries";
 
 let userId: string;
 let locationId: string;
@@ -75,5 +75,37 @@ describe("entries data access", () => {
       note: null,
     });
     await expect(deleteEntry("someone-else", e.id)).rejects.toThrow();
+  });
+});
+
+describe("overlap protection", () => {
+  const base = { date: "2026-06-18", locationId: "", breakMinutes: 0, note: null };
+
+  it("rejects a block overlapping another on the same day", async () => {
+    await createEntry(userId, { ...base, locationId, startMinutes: 540, endMinutes: 1020 });
+    await expect(
+      createEntry(userId, { ...base, locationId, startMinutes: 600, endMinutes: 660 }),
+    ).rejects.toThrow(/overlap/i);
+  });
+
+  it("allows adjacent (touching) blocks", async () => {
+    await createEntry(userId, { ...base, locationId, startMinutes: 540, endMinutes: 720 });
+    await expect(
+      createEntry(userId, { ...base, locationId, startMinutes: 720, endMinutes: 780 }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("allows the same time on a different day", async () => {
+    await createEntry(userId, { ...base, locationId, startMinutes: 540, endMinutes: 1020 });
+    await expect(
+      createEntry(userId, { ...base, date: "2026-06-19", locationId, startMinutes: 540, endMinutes: 1020 }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("lets an entry be updated without overlapping itself", async () => {
+    const e = await createEntry(userId, { ...base, locationId, startMinutes: 540, endMinutes: 1020 });
+    await expect(
+      updateEntry(userId, e.id, { ...base, locationId, startMinutes: 600, endMinutes: 1080 }),
+    ).resolves.toBeUndefined();
   });
 });

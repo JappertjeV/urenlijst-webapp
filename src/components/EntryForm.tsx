@@ -62,21 +62,24 @@ export function EntryForm({ date, locations, entry, onDone }: Props) {
   }
 
   async function action(formData: FormData) {
+    setError(null);
     formData.set("startMinutes", String(parseHHMM(start)));
     formData.set("endMinutes", String(parseHHMM(end)));
     formData.set("breakMinutes", brk);
-    try {
-      await saveEntryAction(formData);
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Opslaan mislukt.");
+    const result = await saveEntryAction(formData);
+    if (result?.error) {
+      setError(result.error);
+      return;
     }
+    onDone();
   }
 
   return (
     <form action={action} className="flex flex-col gap-4">
       {entry && <input type="hidden" name="id" value={entry.id} />}
-      <input type="hidden" name="date" value={date} />
+
+      <label className="text-sm text-ink-soft">Datum
+        <input name="date" type="date" defaultValue={date} required className={fieldCls} /></label>
 
       <label className="text-sm text-ink-soft">Werklocatie
         <select name="locationId" defaultValue={entry?.locationId ?? locations[0]?.id}

@@ -74,10 +74,15 @@ export async function saveEntryAction(formData: FormData) {
     breakMinutes: num(formData, "breakMinutes") || 0,
     note: (formData.get("note") as string) || null,
   };
-  if (id) await updateEntry(userId, id, input);
-  else await createEntry(userId, input);
+  try {
+    if (id) await updateEntry(userId, id, input);
+    else await createEntry(userId, input);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Opslaan mislukt." };
+  }
   revalidatePath("/");
   revalidatePath("/kalender");
+  return { ok: true as const };
 }
 
 export async function deleteEntryAction(formData: FormData) {

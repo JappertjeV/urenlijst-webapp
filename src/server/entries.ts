@@ -15,6 +15,28 @@ function toDate(day: string): Date {
   return new Date(day + "T00:00:00.000Z");
 }
 
+// Reject a block whose time range overlaps another block on the same day.
+async function assertNoOverlap(
+  userId: string,
+  input: Pick<EntryInput, "date" | "startMinutes" | "endMinutes">,
+  excludeId?: string,
+): Promise<void> {
+  const sameDay = await prisma.entry.findMany({
+    where: {
+      userId,
+      date: toDate(input.date),
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: { startMinutes: true, endMinutes: true },
+  });
+  const overlaps = sameDay.some(
+    (e) => input.startMinutes < e.endMinutes && e.startMinutes < input.endMinutes,
+  );
+  if (overlaps) {
+    throw new Error("Dit urenblok overlapt met een bestaand blok op deze dag.");
+  }
+}
+
 function toDTO(e: {
   id: string;
   date: Date;
@@ -58,6 +80,7 @@ export async function createEntry(
     where: { id: input.locationId, userId },
   });
   if (!location) throw new Error("Onbekende werklocatie.");
+  await assertNoOverlap(userId, input);
   const created = await prisma.entry.create({
     data: {
       userId,
@@ -78,6 +101,7 @@ export async function updateEntry(
   input: EntryInput,
 ): Promise<void> {
   workedMinutes(input.startMinutes, input.endMinutes, input.breakMinutes);
+  await assertNoOverlap(userId, input, id);
   const result = await prisma.entry.updateMany({
     where: { id, userId },
     data: {
