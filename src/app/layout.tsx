@@ -21,9 +21,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="nl">
-      <body>
-        <main className="mx-auto w-full max-w-2xl px-4 py-5">{children}</main>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
