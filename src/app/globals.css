@@ -62,24 +62,20 @@ textarea {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* page content clears the fixed bottom nav + home indicator (mobile only) */
+/* page content clears the fixed bottom nav + home indicator (below lg only;
+   at lg the desktop sidebar layout takes over and there is no bottom nav) */
 .with-bottom-nav {
   padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
 }
-@media (min-width: 640px) {
+@media (min-width: 1024px) {
   .with-bottom-nav {
     padding-bottom: 0;
   }
 }
 
-/* floating action button: above the bottom nav + home indicator on mobile */
+/* floating action button: above the bottom nav + home indicator (mobile/tablet) */
 .fab-pos {
   position: fixed;
   right: 1rem;
   bottom: calc(4.75rem + env(safe-area-inset-bottom));
-}
-@media (min-width: 640px) {
-  .fab-pos {
-    bottom: 1.5rem;
-  }
 }
