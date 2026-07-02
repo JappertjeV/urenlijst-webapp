@@ -1,1 +1,116 @@
 @import "tailwindcss";
+
+@theme {
+  /* Warm gebroken wit + paars accent */
+  --color-canvas: #f7f6f2;
+  --color-surface: #ffffff;
+  --color-line: #e9e6df;
+  --color-ink: #211d18;
+  --color-ink-soft: #5f584d;
+  --color-ink-faint: #a49c8e;
+  --color-accent: #7c3aed;
+  --color-accent-deep: #6527cd;
+  --color-accent-soft: #f0e9fe;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fdecec;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --radius-card: 1.25rem;
+  --radius-control: 0.85rem;
+
+  --shadow-soft: 0 2px 16px rgb(33 29 24 / 0.06);
+  --shadow-float: 0 10px 32px rgb(33 29 24 / 0.18);
+}
+
+/* ---- iOS Safari-regels (allemaal eerdere échte bugs) ---- */
+
+html {
+  /* Eén voorspelbare verticale scroller: het document zelf. */
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  min-height: 100svh; /* svh, niet vh: geen springende adresbalk */
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Inputs < 16px triggeren de focus-zoom van iOS Safari. */
+input,
+select,
+textarea,
+button {
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+/* ---- safe-area-utilities ---- */
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility mb-safe {
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
+/* Horizontale scrollgebieden (weekrooster) mogen verticaal scrollen nooit
+   gijzelen: géén touch-action: pan-x, wél overscroll-x insluiten. */
+@utility scroll-x-nice {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* ---- gedeelde formulier- en knopstijlen ---- */
+
+@layer components {
+  .field {
+    @apply w-full appearance-none rounded-(--radius-control) border border-line bg-surface px-3 py-2.5 text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25;
+  }
+
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink-soft;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-(--radius-control) bg-accent px-4 py-2.5 font-medium text-white transition active:scale-[0.98] active:bg-accent-deep disabled:opacity-50 lg:hover:bg-accent-deep;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-(--radius-control) bg-accent-soft px-4 py-2.5 font-medium text-accent transition active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-(--radius-control) bg-danger-soft px-4 py-2.5 font-medium text-danger transition active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .card {
+    @apply rounded-(--radius-card) border border-line bg-surface shadow-(--shadow-soft);
+  }
+
+  .form-error {
+    @apply rounded-(--radius-control) bg-danger-soft px-3 py-2.5 text-[15px] text-danger;
+  }
+
+  /* iOS-stijl grote paginatitel */
+  .page-title {
+    @apply text-[28px] font-bold leading-tight tracking-tight lg:text-[32px];
+  }
+}
