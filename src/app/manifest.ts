@@ -5,6 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Urenlijst",
     short_name: "Urenlijst",
     description: "Uren bijhouden per werklocatie",
+    lang: "nl",
     start_url: "/",
     display: "standalone",
     background_color: "#f7f6f2",

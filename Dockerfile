@@ -1,17 +1,22 @@
-FROM node:20-alpine AS deps
+# ---- dependencies ----
+FROM node:22-alpine AS deps
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:20-alpine AS builder
+# ---- build ----
+FROM node:22-alpine AS builder
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate && npm run build && npm prune --omit=dev
+# SESSION_SECRET is hier bewust afwezig: de app leest cookies vóór de
+# secret-validatie, zodat prerendering tijdens de build niet crasht.
+RUN npm run build && npm prune --omit=dev
 
-FROM node:20-alpine AS runner
+# ---- runtime ----
+FROM node:22-alpine AS runner
 RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production

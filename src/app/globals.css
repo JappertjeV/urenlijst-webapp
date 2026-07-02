@@ -1,81 +1,116 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
-  color-scheme: light;
+@theme {
+  /* Warm gebroken wit + paars accent */
+  --color-canvas: #f7f6f2;
+  --color-surface: #ffffff;
+  --color-line: #e9e6df;
+  --color-ink: #211d18;
+  --color-ink-soft: #5f584d;
+  --color-ink-faint: #a49c8e;
+  --color-accent: #7c3aed;
+  --color-accent-deep: #6527cd;
+  --color-accent-soft: #f0e9fe;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fdecec;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --radius-card: 1.25rem;
+  --radius-control: 0.85rem;
+
+  --shadow-soft: 0 2px 16px rgb(33 29 24 / 0.06);
+  --shadow-float: 0 10px 32px rgb(33 29 24 / 0.18);
 }
 
+/* ---- iOS Safari-regels (allemaal eerdere échte bugs) ---- */
+
 html {
-  height: 100%;
-  -webkit-text-size-adjust: 100%;
+  /* Eén voorspelbare verticale scroller: het document zelf. */
+  overflow-x: hidden;
 }
 
 body {
-  /* small-viewport height: no jump as the iOS URL bar shows/hides */
-  min-height: 100svh;
-  background: #f7f6f2;
-  color: #1c1c1a;
-  font-feature-settings: "tnum";
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  /* one predictable scroll container = the document; never scroll sideways */
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  min-height: 100svh; /* svh, niet vh: geen springende adresbalk */
   overflow-x: hidden;
-  /* no whole-page rubber-band bounce */
   overscroll-behavior-y: none;
-  /* kill the tap delay + double-tap zoom (pinch-zoom still works) */
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  /* respect the notch sides / status bar area in standalone */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* iOS focus-zoom guard: text fields must render at >= 16px */
+/* Inputs < 16px triggeren de focus-zoom van iOS Safari. */
 input,
 select,
-textarea {
-  font-size: 16px;
+textarea,
+button {
+  font-size: 1rem;
+  font-family: inherit;
 }
 
-/* contained horizontal scroll regions (e.g. the week grid): scroll only
-   horizontally; overflow-y:hidden (not auto) means vertical drags are NOT
-   captured here and scroll the page instead. Do NOT set touch-action:pan-x —
-   that would block vertical page scrolling for touches starting on the grid. */
-.scroll-x {
+/* ---- safe-area-utilities ---- */
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility mb-safe {
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
+/* Horizontale scrollgebieden (weekrooster) mogen verticaal scrollen nooit
+   gijzelen: géén touch-action: pan-x, wél overscroll-x insluiten. */
+@utility scroll-x-nice {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
-/* press feedback instead of hover on touch devices */
-@media (hover: none) {
-  a:active,
-  button:active,
-  [role="button"]:active {
-    opacity: 0.55;
+/* ---- gedeelde formulier- en knopstijlen ---- */
+
+@layer components {
+  .field {
+    @apply w-full appearance-none rounded-(--radius-control) border border-line bg-surface px-3 py-2.5 text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25;
   }
-}
 
-/* bottom safe-area helper for fixed bars */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-/* page content clears the fixed bottom nav + home indicator (below lg only;
-   at lg the desktop sidebar layout takes over and there is no bottom nav) */
-.with-bottom-nav {
-  padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
-}
-@media (min-width: 1024px) {
-  .with-bottom-nav {
-    padding-bottom: 0;
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink-soft;
   }
-}
 
-/* floating action button: above the bottom nav + home indicator (mobile/tablet) */
-.fab-pos {
-  position: fixed;
-  right: 1rem;
-  bottom: calc(4.75rem + env(safe-area-inset-bottom));
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-(--radius-control) bg-accent px-4 py-2.5 font-medium text-white transition active:scale-[0.98] active:bg-accent-deep disabled:opacity-50 lg:hover:bg-accent-deep;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-(--radius-control) bg-accent-soft px-4 py-2.5 font-medium text-accent transition active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-(--radius-control) bg-danger-soft px-4 py-2.5 font-medium text-danger transition active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .card {
+    @apply rounded-(--radius-card) border border-line bg-surface shadow-(--shadow-soft);
+  }
+
+  .form-error {
+    @apply rounded-(--radius-control) bg-danger-soft px-3 py-2.5 text-[15px] text-danger;
+  }
+
+  /* iOS-stijl grote paginatitel */
+  .page-title {
+    @apply text-[28px] font-bold leading-tight tracking-tight lg:text-[32px];
+  }
 }

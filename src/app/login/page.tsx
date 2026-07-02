@@ -1,36 +1,61 @@
 "use client";
 
-import { loginAction } from "../actions";
-import { useState } from "react";
-
-const fieldCls =
-  "mt-1 w-full rounded-xl border border-surface-line bg-surface px-3 py-2.5 text-base";
+import Link from "next/link";
+import Image from "next/image";
+import { useActionState } from "react";
+import { loginAction } from "@/app/actions";
 
 export default function LoginPage() {
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleAction(formData: FormData) {
-    const result = await loginAction(formData);
-    if (result?.error) setError(result.error);
-  }
+  const [state, action, pending] = useActionState(loginAction, null);
+  const error = state && "error" in state ? state.error : null;
 
   return (
-    <div className="flex min-h-[100svh] items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <h1 className="mb-6 text-[28px] font-bold leading-tight">Inloggen</h1>
-        <form action={handleAction} className="flex flex-col gap-4">
-          <label className="text-sm text-ink-soft">Gebruikersnaam
-            <input name="username" required autoComplete="username" autoCapitalize="none" autoCorrect="off"
-              className={fieldCls} /></label>
-          <label className="text-sm text-ink-soft">Wachtwoord
-            <input name="password" type="password" required autoComplete="current-password"
-              className={fieldCls} /></label>
-          {error && <div className="text-sm text-red-600">{error}</div>}
-          <button className="w-full rounded-xl bg-accent py-3 text-base font-medium text-white active:opacity-80">Inloggen</button>
+    <div className="flex min-h-svh items-center justify-center p-4">
+      <div className="card w-full max-w-sm p-6">
+        <div className="mb-6 flex flex-col items-center gap-3">
+          <Image src="/icon.svg" alt="" width={56} height={56} className="rounded-2xl" />
+          <h1 className="text-xl font-bold">Inloggen</h1>
+        </div>
+        <form action={action} className="flex flex-col gap-4">
+          <div>
+            <label className="label" htmlFor="username">Gebruikersnaam</label>
+            <input
+              id="username"
+              name="username"
+              className="field"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              required
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="password">Wachtwoord</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              className="field"
+              autoComplete="current-password"
+              required
+            />
+          </div>
+          {error && <p className="form-error">{error}</p>}
+          <button type="submit" className="btn-primary" disabled={pending}>
+            {pending ? "Inloggen…" : "Inloggen"}
+          </button>
         </form>
-        <a href="/register" className="mt-5 inline-block text-sm text-accent">
-          Nog geen account? Account aanmaken
-        </a>
+        <div className="mt-5 flex flex-col gap-2 text-center text-sm">
+          <p className="text-ink-soft">
+            Nog geen account?{" "}
+            <Link href="/register" className="font-medium text-accent">
+              Account aanmaken
+            </Link>
+          </p>
+          <Link href="/" className="text-ink-faint">
+            ← Terug naar de uren
+          </Link>
+        </div>
       </div>
     </div>
   );

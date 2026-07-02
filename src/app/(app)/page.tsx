@@ -1,14 +1,11 @@
+import Link from "next/link";
 import { format } from "date-fns";
-import { getCurrentUserId } from "@/lib/auth";
-import { listProfiles } from "@/server/users";
-import { listLocations, listAllLocations, getRateChangesByLocation } from "@/server/locations";
-import { listEntries } from "@/server/entries";
-import { weekRange } from "@/lib/week";
-import { workedMinutes } from "@/lib/time";
-import { salaryCents } from "@/lib/money";
-import { rateForDate } from "@/lib/rates";
-import { TodayScreen } from "@/components/TodayScreen";
-import type { EntryDTO } from "@/types";
+import { nl } from "date-fns/locale";
+import { dayKey, periodRange } from "@/domain/dates";
+import { loadRange, resolveScreen } from "@/data/screen";
+import { entryCents, entryMinutes } from "@/ui/entries/entry-helpers";
+import { EntryList } from "@/ui/entries/EntryList";
+import { StatCards } from "@/ui/StatCards";
 
 export default async function VandaagPage({
   searchParams,
@@ -16,62 +13,71 @@ export default async function VandaagPage({
   searchParams: Promise<{ profile?: string }>;
 }) {
   const { profile } = await searchParams;
-  const currentUserId = await getCurrentUserId();
-  const profiles = await listProfiles();
-  const activeId = currentUserId ?? profile ?? profiles[0]?.id;
+  const screen = await resolveScreen(profile);
 
-  if (!activeId) {
+  if (!screen.activeId) {
     return (
-      <p className="text-sm">
-        Nog geen profiel. <a href="/register" className="text-accent">Account aanmaken</a>.
-      </p>
+      <div className="card px-4 py-8 text-center">
+        <p className="mb-2 font-medium">Nog geen profielen.</p>
+        <Link href="/register" className="text-accent">
+          Maak het eerste account aan →
+        </Link>
+      </div>
     );
   }
 
-  const isOwner = currentUserId === activeId;
-  const [allLocations, activeLocations, rateChanges] = await Promise.all([
-    listAllLocations(activeId),
-    listLocations(activeId),
-    getRateChangesByLocation(activeId),
-  ]);
-  const locById = new Map(allLocations.map((l) => [l.id, l]));
-  const rateOf = (e: EntryDTO) =>
-    rateForDate(locById.get(e.locationId)?.hourlyRate ?? 0, rateChanges.get(e.locationId) ?? [], e.date);
-
   const now = new Date();
-  const today = format(now, "yyyy-MM-dd");
-  const { start, end } = weekRange(now);
-  const weekEntries = await listEntries(activeId, {
-    from: format(start, "yyyy-MM-dd"),
-    to: format(end, "yyyy-MM-dd"),
+  const today = dayKey(now);
+  const week = periodRange("week", now);
+  const { entries, locations } = await loadRange(screen, {
+    from: dayKey(week.start),
+    to: dayKey(week.end),
   });
 
-  const todayEntries = weekEntries
-    .filter((e) => e.date === today)
-    .map((e) => (isOwner ? { ...e, rateCents: rateOf(e) } : e));
+  const todayEntries = entries.filter((e) => e.date === today);
+  const sum = (list: typeof entries) =>
+    list.reduce(
+      (acc, e) => {
+        acc.minutes += entryMinutes(e);
+        acc.cents = screen.isOwner ? (acc.cents ?? 0) + (entryCents(e) ?? 0) : null;
+        return acc;
+      },
+      { minutes: 0, cents: screen.isOwner ? 0 : null } as {
+        minutes: number;
+        cents: number | null;
+      },
+    );
 
-  let weekMinutes = 0;
-  let weekCents = 0;
-  for (const e of weekEntries) {
-    if (!locById.has(e.locationId)) continue;
-    const m = workedMinutes(e.startMinutes, e.endMinutes, e.breakMinutes);
-    weekMinutes += m;
-    weekCents += salaryCents(m, rateOf(e));
-  }
-
-  const strip = (ls: typeof allLocations) =>
-    isOwner ? ls : ls.map((l) => ({ ...l, hourlyRate: 0 }));
+  const day = sum(todayEntries);
+  const weekTotal = sum(entries);
+  const workedDays = new Set(entries.map((e) => e.date)).size;
 
   return (
-    <TodayScreen
-      today={today}
-      entries={todayEntries}
-      locations={strip(allLocations)}
-      editableLocations={strip(activeLocations)}
-      canEdit={isOwner}
-      showSalary={isOwner}
-      weekMinutes={weekMinutes}
-      weekCents={weekCents}
-    />
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="page-title">Vandaag</h1>
+        <p className="text-[15px] text-ink-soft first-letter:uppercase">
+          {format(now, "EEEE d MMMM yyyy", { locale: nl })}
+        </p>
+      </div>
+
+      <StatCards
+        stats={[
+          { label: "Vandaag", minutes: day.minutes, cents: day.cents },
+          {
+            label: "Deze week",
+            minutes: weekTotal.minutes,
+            cents: weekTotal.cents,
+            hint: `${workedDays} ${workedDays === 1 ? "dag" : "dagen"} gewerkt`,
+          },
+        ]}
+      />
+
+      <EntryList
+        entries={todayEntries}
+        locations={locations}
+        canEdit={screen.isOwner}
+      />
+    </div>
   );
 }

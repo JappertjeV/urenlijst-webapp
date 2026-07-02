@@ -1,14 +1,17 @@
 services:
-  app:
+  urenlijst:
+    image: ghcr.io/jappertjev/urenlijst-webapp:latest
     build: .
-    image: urenlijst-webapp
     container_name: urenlijst
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: "file:/data/urenlijst.db"
       SESSION_SECRET: "${SESSION_SECRET:?Zet SESSION_SECRET in .env (genereer met: openssl rand -base64 32)}"
-      # Zet op true bij de allereerste start om een demo-profiel (jasper/demo1234) te seeden.
+      # Op een homelab zonder HTTPS moet dit true zijn, anders weigert de
+      # browser het sessiecookie en lijkt inloggen stilletjes niet te werken.
+      ALLOW_INSECURE_COOKIE: "${ALLOW_INSECURE_COOKIE:-true}"
+      # Eénmalig op true zetten om een demo-profiel (jasper/demo1234) te seeden.
       SEED_ON_START: "${SEED_ON_START:-false}"
     volumes:
       - urenlijst-data:/data

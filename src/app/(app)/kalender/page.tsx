@@ -1,97 +1,157 @@
 import Link from "next/link";
 import { format } from "date-fns";
-import { getCurrentUserId } from "@/lib/auth";
-import { listProfiles } from "@/server/users";
-import { listLocations, listAllLocations, getRateChangesByLocation } from "@/server/locations";
-import { listEntries } from "@/server/entries";
-import { weekRange } from "@/lib/week";
-import { workedMinutes } from "@/lib/time";
-import { aggregate } from "@/lib/salary";
-import { rateForDate } from "@/lib/rates";
-import { CalendarHome } from "@/components/CalendarHome";
-import { SummaryCards } from "@/components/SummaryCards";
-import { LocationLegend } from "@/components/LocationLegend";
+import { nl } from "date-fns/locale";
+import {
+  addPeriod,
+  dayKey,
+  eachDayOfWeek,
+  isoWeekNumber,
+  monthGridDays,
+  parseDayKey,
+  periodRange,
+} from "@/domain/dates";
+import { loadRange, resolveScreen } from "@/data/screen";
+import {
+  CalendarScreen,
+  CalendarTotals,
+  type CalendarDay,
+} from "@/ui/calendar/CalendarScreen";
+import { Icon } from "@/ui/icons";
 
-export default async function HomePage({
+const VIEWS = ["week", "maand", "dag"] as const;
+type View = (typeof VIEWS)[number];
+
+const VIEW_LABELS: Record<View, string> = {
+  week: "Week",
+  maand: "Maand",
+  dag: "Dag",
+};
+
+export default async function KalenderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ profile?: string }>;
+  searchParams: Promise<{ profile?: string; view?: string; datum?: string }>;
 }) {
-  const { profile } = await searchParams;
-  const currentUserId = await getCurrentUserId();
-  const profiles = await listProfiles();
-  const activeId = currentUserId ?? profile ?? profiles[0]?.id;
+  const params = await searchParams;
+  const screen = await resolveScreen(params.profile);
 
-  if (!activeId) {
-    return (
-      <div>
-        <p className="mb-4">Nog geen profiel. Voer de seed uit of maak een account aan.</p>
-        <Link href="/login" className="text-accent">Inloggen</Link>
-      </div>
-    );
-  }
+  const view: View = (VIEWS as readonly string[]).includes(params.view ?? "")
+    ? (params.view as View)
+    : "week";
+  const todayKey = dayKey(new Date());
+  const datum = /^\d{4}-\d{2}-\d{2}$/.test(params.datum ?? "")
+    ? params.datum!
+    : todayKey;
+  const date = parseDayKey(datum);
 
-  const isOwner = currentUserId === activeId;
-  // Active locations drive the new-entry form; all locations (incl. archived)
-  // are needed to render/aggregate entries whose location was archived later.
-  const activeLocations = await listLocations(activeId);
-  const allLocations = await listAllLocations(activeId);
-  // hourlyRate is salary data: never serialize it to the client for non-owners
-  // (client components leak their props into the RSC payload).
-  const strip = (ls: typeof allLocations) =>
-    isOwner ? ls : ls.map((l) => ({ ...l, hourlyRate: 0 }));
-  const clientLocations = strip(allLocations);
-  const editableLocations = strip(activeLocations);
+  // Navigatie: alles via links (server-rendered), zodat de URL deelbaar
+  // blijft en er geen functies over de RSC-grens gaan.
+  const href = (v: View, d: string) => {
+    const query = new URLSearchParams({ view: v, datum: d });
+    if (params.profile) query.set("profile", params.profile);
+    return `/kalender?${query.toString()}`;
+  };
 
-  const now = new Date();
-  const { start, end } = weekRange(now);
-  const weekEntries = await listEntries(activeId, {
-    from: format(start, "yyyy-MM-dd"),
-    to: format(end, "yyyy-MM-dd"),
+  const toCalendarDay = (d: Date, inMonth = true): CalendarDay => ({
+    key: dayKey(d),
+    dayNumber: d.getDate(),
+    weekdayShort: format(d, "EEEEEE", { locale: nl }),
+    inMonth,
+    href: href("dag", dayKey(d)),
   });
-  const monthEntries = await listEntries(activeId, {
-    from: format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd"),
-    to: format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd"),
+
+  const days: CalendarDay[] =
+    view === "week"
+      ? eachDayOfWeek(date).map((d) => toCalendarDay(d))
+      : view === "maand"
+        ? monthGridDays(date).map((d) =>
+            toCalendarDay(d, d.getMonth() === date.getMonth()),
+          )
+        : [toCalendarDay(date)];
+
+  const first = days[0]!.key;
+  const last = days[days.length - 1]!.key;
+  const { entries, locations } = await loadRange(screen, {
+    from: first,
+    to: last,
   });
-  const allEntries = Array.from(
-    new Map([...weekEntries, ...monthEntries].map((e) => [e.id, e])).values(),
-  );
 
-  const locById = new Map(allLocations.map((l) => [l.id, l]));
-  const rateChanges = await getRateChangesByLocation(activeId);
-  const rateOf = (e: { locationId: string; date: string }) =>
-    rateForDate(
-      locById.get(e.locationId)?.hourlyRate ?? 0,
-      rateChanges.get(e.locationId) ?? [],
-      e.date,
-    );
+  const navPeriod = view === "maand" ? "maand" : view === "week" ? "week" : "dag";
+  const prevHref = href(view, dayKey(addPeriod(navPeriod, date, -1)));
+  const nextHref = href(view, dayKey(addPeriod(navPeriod, date, 1)));
 
-  const agg = aggregate(
-    weekEntries
-      .filter((e) => locById.has(e.locationId))
-      .map((e) => {
-        const l = locById.get(e.locationId)!;
-        return {
-          locationId: e.locationId, name: l.name, color: l.color,
-          hourlyRate: rateOf(e),
-          minutes: workedMinutes(e.startMinutes, e.endMinutes, e.breakMinutes),
-        };
-      }),
-  );
-  const workedDays = new Set(weekEntries.map((e) => e.date)).size;
+  const { start, end } = periodRange(navPeriod, date);
+  const label =
+    view === "week"
+      ? `Week ${isoWeekNumber(date)} · ${format(start, "d MMM", { locale: nl })} – ${format(end, "d MMM yyyy", { locale: nl })}`
+      : view === "maand"
+        ? format(date, "MMMM yyyy", { locale: nl })
+        : format(date, "EEEE d MMMM yyyy", { locale: nl });
 
-  // Attach the date-applicable rate to each entry, owner-only (no salary leak).
-  const ratedEntries = isOwner
-    ? allEntries.map((e) => ({ ...e, rateCents: rateOf(e) }))
-    : allEntries;
+  const visible =
+    view === "maand"
+      ? entries.filter((e) => e.date.slice(0, 7) === datum.slice(0, 7))
+      : view === "dag"
+        ? entries.filter((e) => e.date === datum)
+        : entries;
 
   return (
-    <div>
-      <SummaryCards minutes={agg.total.minutes} cents={agg.total.cents}
-        workedDays={workedDays} showSalary={isOwner} />
-      <CalendarHome entries={ratedEntries} locations={clientLocations}
-        editableLocations={editableLocations} canEdit={isOwner} showSalary={isOwner} />
-      <LocationLegend locations={editableLocations} />
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="page-title">Kalender</h1>
+          <p className="text-[15px] text-ink-soft first-letter:uppercase">{label}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Link
+            href={prevHref}
+            aria-label="Vorige periode"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition active:bg-canvas lg:hover:bg-canvas"
+          >
+            <Icon name="chevron-links" size={20} />
+          </Link>
+          <Link
+            href={href(view, todayKey)}
+            className="rounded-full px-3 py-1.5 text-[14px] font-medium text-accent transition active:bg-accent-soft lg:hover:bg-accent-soft"
+          >
+            Vandaag
+          </Link>
+          <Link
+            href={nextHref}
+            aria-label="Volgende periode"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition active:bg-canvas lg:hover:bg-canvas"
+          >
+            <Icon name="chevron-rechts" size={20} />
+          </Link>
+        </div>
+      </div>
+
+      {/* weergavekiezer */}
+      <div className="flex w-fit rounded-full bg-surface p-1 shadow-(--shadow-soft)">
+        {VIEWS.map((v) => (
+          <Link
+            key={v}
+            href={href(v, datum)}
+            className={`rounded-full px-4 py-1.5 text-[14px] font-medium transition-colors ${
+              v === view ? "bg-accent text-white" : "text-ink-soft"
+            }`}
+          >
+            {VIEW_LABELS[v]}
+          </Link>
+        ))}
+      </div>
+
+      <CalendarScreen
+        view={view}
+        days={days}
+        todayKey={todayKey}
+        selectedKey={datum}
+        entries={entries}
+        locations={locations}
+        canEdit={screen.isOwner}
+      />
+
+      <CalendarTotals entries={visible} />
     </div>
   );
 }
