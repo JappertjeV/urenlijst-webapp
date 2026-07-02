@@ -40,10 +40,21 @@ async function validate(
 ): Promise<void> {
   workedMinutes(input.startMinutes, input.endMinutes, input.breakMinutes);
   const location = await prisma.location.findFirst({
-    where: { id: input.locationId, userId, archived: false },
-    select: { id: true },
+    where: { id: input.locationId, userId },
+    select: { archived: true },
   });
   if (!location) throw new Error("Onbekende werklocatie.");
+  if (location.archived) {
+    // Een bestaand blok mag zijn gearchiveerde locatie houden bij bewerken;
+    // nieuwe blokken (of verhuizingen) naar een gearchiveerde locatie niet.
+    const keepsLocation =
+      excludeId !== undefined &&
+      (await prisma.entry.findFirst({
+        where: { id: excludeId, userId, locationId: input.locationId },
+        select: { id: true },
+      })) !== null;
+    if (!keepsLocation) throw new Error("Onbekende werklocatie.");
+  }
   const sameDay = await prisma.entry.findMany({
     where: { userId, date: toDbDate(input.date) },
     select: { id: true, startMinutes: true, endMinutes: true },

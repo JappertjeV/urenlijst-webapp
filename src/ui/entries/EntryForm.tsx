@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
   deleteEntryAction,
   saveEntryAction,
@@ -75,20 +75,28 @@ export function EntryForm({
 }) {
   const [start, setStart] = useState(entry?.startMinutes ?? 9 * 60);
   const [end, setEnd] = useState(entry?.endMinutes ?? 17 * 60);
+
+  // Actieve locaties zijn kiesbaar; de (eventueel gearchiveerde) locatie van
+  // het blok zelf blijft zichtbaar zodat bewerken nooit stukloopt.
+  const options = locations.filter(
+    (l) => !l.archived || l.id === entry?.locationId,
+  );
   const [saveState, save, saving] = useActionState<ActionState, FormData>(
-    saveEntryAction,
+    async (prev, formData) => {
+      const result = await saveEntryAction(prev, formData);
+      if (result && "ok" in result) onDone();
+      return result;
+    },
     null,
   );
   const [deleteState, remove, deleting] = useActionState<ActionState, FormData>(
-    deleteEntryAction,
+    async (prev, formData) => {
+      const result = await deleteEntryAction(prev, formData);
+      if (result && "ok" in result) onDone();
+      return result;
+    },
     null,
   );
-
-  const done =
-    (saveState && "ok" in saveState) || (deleteState && "ok" in deleteState);
-  useEffect(() => {
-    if (done) onDone();
-  }, [done, onDone]);
 
   const error =
     saveState && "error" in saveState
@@ -129,12 +137,13 @@ export function EntryForm({
             defaultValue={entry?.locationId}
             required
           >
-            {locations.length === 0 && (
+            {options.length === 0 && (
               <option value="">Maak eerst een werklocatie aan</option>
             )}
-            {locations.map((l) => (
+            {options.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
+                {l.archived ? " (gearchiveerd)" : ""}
               </option>
             ))}
           </select>

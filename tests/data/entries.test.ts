@@ -79,6 +79,24 @@ describe("createEntry / listEntries", () => {
       createEntry(owner, { ...base, date: "2026-07-04", locationId: oud.id }),
     ).rejects.toThrow("Onbekende werklocatie.");
   });
+
+  it("laat een bestaand blok zijn gearchiveerde locatie houden bij bewerken, maar verhuizen ernaartoe niet", async () => {
+    const oud = await createLocation(owner, { name: "Oud 2", color: "#000", hourlyRate: 1000 });
+    const entry = await createEntry(owner, { ...base, date: "2026-07-05", locationId: oud.id });
+    const ander = await createEntry(owner, {
+      ...base, date: "2026-07-06", startMinutes: 600, endMinutes: 700, breakMinutes: 0, locationId,
+    });
+    await archiveLocation(owner, oud.id);
+
+    // Tijden aanpassen terwijl de (inmiddels gearchiveerde) locatie blijft: oké.
+    await expect(
+      updateEntry(owner, entry.id, { ...base, date: "2026-07-05", startMinutes: 480, endMinutes: 960, locationId: oud.id }),
+    ).resolves.toBeUndefined();
+    // Een ánder blok naar de gearchiveerde locatie verhuizen: niet oké.
+    await expect(
+      updateEntry(owner, ander.id, { ...base, date: "2026-07-06", startMinutes: 600, endMinutes: 700, breakMinutes: 0, locationId: oud.id }),
+    ).rejects.toThrow("Onbekende werklocatie.");
+  });
 });
 
 describe("overlap-preventie", () => {
