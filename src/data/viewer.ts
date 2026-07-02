@@ -15,11 +15,16 @@ export function pickActiveProfile(
   return profiles[0]?.id ?? null;
 }
 
-// Verwijdert tariefvelden volledig uit de payload voor niet-eigenaren.
+// Houdt voor niet-eigenaren alleen de expliciet publieke velden over.
 // Weglaten in plaats van verbergen: client-componentprops lekken naar de
 // RSC-payload, dus wat de client niet mag zien mag er niet in zitten.
 export function stripRates(locations: LocationDTO[]): LocationDTO[] {
-  return locations.map(({ hourlyRate: _hourlyRate, ...rest }) => rest);
+  return locations.map(({ id, name, color, archived }) => ({
+    id,
+    name,
+    color,
+    archived,
+  }));
 }
 
 // Verrijkt blokken met het uurtarief dat op de blokdatum gold (alleen voor
