@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatEUR } from "@/domain/money";
 import { formatHHMM, formatHours } from "@/domain/time";
 import { EntryForm } from "@/ui/entries/EntryForm";
@@ -12,8 +12,31 @@ import {
   locationOf,
 } from "@/ui/entries/entry-helpers";
 import { Sheet } from "@/ui/shell/Sheet";
-import { GRID_PX, HourAxis, HourLines, TimeBlock } from "@/ui/calendar/blocks";
+import { GRID_PX, HOUR_PX, HourAxis, HourLines, TimeBlock } from "@/ui/calendar/blocks";
 import type { EntryDTO, LocationDTO } from "@/types";
+
+// Kolomsjablonen: smalle uur-as + gelijke dagkolommen. Kop en raster delen
+// hetzelfde sjabloon zodat de kolommen exact uitlijnen.
+const WEEK_COLS = "2.5rem repeat(7, 1fr)";
+const DAY_COLS = "2.5rem 1fr";
+
+// Het tijdrooster scrollt in een eigen begrensd venster (niet de hele pagina),
+// zodat titel/navigatie/totalen zichtbaar blijven en de muis/veeg het rooster
+// bedient. Start rond 07:00 zodat je niet door de nacht hoeft te scrollen.
+function TimeGrid({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = 7 * HOUR_PX;
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className="max-h-[60vh] overflow-y-auto overscroll-contain lg:max-h-[68vh]"
+    >
+      {children}
+    </div>
+  );
+}
 
 export type CalendarDay = {
   key: string; // yyyy-MM-dd
@@ -82,9 +105,12 @@ export function CalendarScreen({
         <div className="card overflow-hidden">
           {/* Geen horizontale scroller: het rooster past op de schermbreedte, zodat
               verticaal scrollen (24-uursas) nooit met een horizontale as concurreert. */}
-          <div>
-            {/* dagkoppen */}
-            <div className="grid border-b border-line" style={{ gridTemplateColumns: "2.25rem repeat(7, 1fr)" }}>
+          <TimeGrid>
+            {/* dagkoppen — plakken bovenaan tijdens het scrollen */}
+            <div
+              className="sticky top-0 z-10 grid border-b border-line bg-surface"
+              style={{ gridTemplateColumns: WEEK_COLS }}
+            >
               <span />
               {days.map((d) => (
                 <Link
@@ -106,7 +132,7 @@ export function CalendarScreen({
               ))}
             </div>
             {/* raster */}
-            <div className="grid" style={{ gridTemplateColumns: "2.25rem repeat(7, 1fr)" }}>
+            <div className="grid" style={{ gridTemplateColumns: WEEK_COLS }}>
               <HourAxis />
               {days.map((d) => (
                 <div
@@ -128,7 +154,7 @@ export function CalendarScreen({
                 </div>
               ))}
             </div>
-          </div>
+          </TimeGrid>
         </div>
       )}
 
@@ -191,20 +217,22 @@ export function CalendarScreen({
       {view === "dag" && (
         <div className="flex flex-col gap-4">
           <div className="card overflow-hidden">
-            <div className="grid" style={{ gridTemplateColumns: "3rem 1fr" }}>
-              <HourAxis />
-              <div className="relative" style={{ height: GRID_PX }}>
-                <HourLines />
-                {selectedEntries.map((e) => (
-                  <TimeBlock
-                    key={e.id}
-                    entry={e}
-                    locations={locations}
-                    onOpen={setOpened}
-                  />
-                ))}
+            <TimeGrid>
+              <div className="grid" style={{ gridTemplateColumns: DAY_COLS }}>
+                <HourAxis />
+                <div className="relative" style={{ height: GRID_PX }}>
+                  <HourLines />
+                  {selectedEntries.map((e) => (
+                    <TimeBlock
+                      key={e.id}
+                      entry={e}
+                      locations={locations}
+                      onOpen={setOpened}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            </TimeGrid>
           </div>
           <EntryList
             entries={selectedEntries}

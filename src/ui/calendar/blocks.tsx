@@ -75,17 +75,18 @@ export function TimeBlock({
   );
 }
 
-// De uurlijnen + labels die week- en dagweergave delen.
+// De uurlijnen + labels die week- en dagweergave delen. Labels tonen enkel het
+// uur (2-cijferig) zodat ze niet tegen de rand kruipen op smalle kolommen.
 export function HourAxis() {
   return (
     <div className="relative border-r border-line" style={{ height: GRID_PX }}>
       {Array.from({ length: 24 }, (_, h) => (
         <span
           key={h}
-          className="absolute right-1.5 -translate-y-1/2 text-[10px] text-ink-faint tabular-nums"
-          style={{ top: h === 0 ? 6 : h * HOUR_PX }}
+          className="absolute right-2 -translate-y-1/2 text-[11px] font-medium text-ink-faint tabular-nums"
+          style={{ top: h === 0 ? 9 : h * HOUR_PX }}
         >
-          {String(h).padStart(2, "0")}:00
+          {String(h).padStart(2, "0")}
         </span>
       ))}
     </div>
