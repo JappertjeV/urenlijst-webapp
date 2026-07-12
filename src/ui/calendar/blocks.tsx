@@ -1,11 +1,29 @@
 "use client";
 
-import { formatHHMM } from "@/domain/time";
-import { locationOf } from "@/ui/entries/entry-helpers";
+import { formatHHMM, formatHours } from "@/domain/time";
+import { entryMinutes, locationOf } from "@/ui/entries/entry-helpers";
 import type { EntryDTO, LocationDTO } from "@/types";
 
 export const HOUR_PX = 44; // hoogte van één uur in de tijdrasters
 export const GRID_PX = 24 * HOUR_PX;
+
+// Leesbaar palet per locatiekleur: donkere tekst op lichte blokken (bv. geel),
+// witte tekst op donkere. Zo verdwijnt de tekst nooit in de achtergrond.
+function blockPalette(hex: string) {
+  const c = (hex || "").replace("#", "").trim();
+  const f = c.length === 3 ? c.split("").map((x) => x + x).join("") : c;
+  const r = parseInt(f.slice(0, 2), 16) || 0;
+  const g = parseInt(f.slice(2, 4), 16) || 0;
+  const b = parseInt(f.slice(4, 6), 16) || 0;
+  const lightBg = (r * 299 + g * 587 + b * 114) / 1000 >= 150;
+  return {
+    text: lightBg ? "#1c1a17" : "#ffffff",
+    stripe: lightBg ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.28)",
+    border: lightBg ? "rgba(0,0,0,0.40)" : "rgba(255,255,255,0.9)",
+    pillBg: lightBg ? "rgba(28,26,23,0.88)" : "rgba(255,255,255,0.92)",
+    pillText: lightBg ? "#ffffff" : "#1c1a17",
+  };
+}
 
 // Een gekleurd urenblok, absoluut gepositioneerd op de 24-uursas.
 export function TimeBlock({
@@ -26,6 +44,8 @@ export function TimeBlock({
     18,
   );
   const compact = height < 34;
+  const palette = blockPalette(location.color);
+  const workedLabel = formatHours(entryMinutes(entry)); // netto: totaal − pauze
 
   // Pauze als gestippeld/gearceerd blok midden in het urenblok. Hoogte schaalt
   // met de duur (met een minimum zodat het label leesbaar blijft). Verklaart
@@ -38,19 +58,24 @@ export function TimeBlock({
   );
   const breakBandTop = (height - breakBandHeight) / 2;
 
+  // Tweede regel (locatie + netto uren) alleen tonen als er ruimte is boven de
+  // pauzeband, anders overlapt de tekst de band.
+  const showMeta = showLabel && (showBreakBand ? height >= 64 : !compact);
+
   return (
     <button
       onClick={() => onOpen(entry)}
-      className="absolute inset-x-0.5 flex flex-col items-start justify-start overflow-hidden rounded-lg px-1.5 py-1 text-left text-white shadow-sm transition active:brightness-90 lg:hover:brightness-95"
-      style={{ top, height, backgroundColor: location.color }}
-      aria-label={`${location.name}, ${formatHHMM(entry.startMinutes)} tot ${formatHHMM(entry.endMinutes)}${hasBreak ? `, ${entry.breakMinutes} minuten pauze` : ""}`}
+      className="absolute inset-x-0.5 flex flex-col items-start justify-start overflow-hidden rounded-lg px-1.5 py-1 text-left shadow-sm transition active:brightness-95 lg:hover:brightness-[0.97]"
+      style={{ top, height, backgroundColor: location.color, color: palette.text }}
+      aria-label={`${location.name}, ${formatHHMM(entry.startMinutes)} tot ${formatHHMM(entry.endMinutes)}, ${workedLabel} gewerkt${hasBreak ? `, ${entry.breakMinutes} minuten pauze` : ""}`}
     >
       <span className={`block truncate font-semibold ${compact ? "text-[10px] leading-tight" : "text-[11px]"}`}>
         {formatHHMM(entry.startMinutes)}–{formatHHMM(entry.endMinutes)}
       </span>
-      {showLabel && !compact && !showBreakBand && (
-        <span className="block truncate text-[11px] opacity-90">
-          {location.name}
+      {showMeta && (
+        <span className="block truncate text-[11px]">
+          <span className="font-semibold">{workedLabel}</span>
+          <span className="opacity-80"> · {location.name}</span>
         </span>
       )}
       {showBreakBand && (
@@ -60,13 +85,15 @@ export function TimeBlock({
           style={{
             top: breakBandTop,
             height: breakBandHeight,
-            backgroundImage:
-              "repeating-linear-gradient(45deg, rgba(255,255,255,0.28) 0, rgba(255,255,255,0.28) 3px, transparent 3px, transparent 7px)",
-            borderTop: "1px dashed rgba(255,255,255,0.9)",
-            borderBottom: "1px dashed rgba(255,255,255,0.9)",
+            backgroundImage: `repeating-linear-gradient(45deg, ${palette.stripe} 0, ${palette.stripe} 3px, transparent 3px, transparent 7px)`,
+            borderTop: `1px dashed ${palette.border}`,
+            borderBottom: `1px dashed ${palette.border}`,
           }}
         >
-          <span className="rounded-full bg-white/90 px-1.5 py-px text-[9px] font-bold leading-none text-ink shadow-sm">
+          <span
+            className="rounded-full px-1.5 py-px text-[9px] font-bold leading-none shadow-sm"
+            style={{ backgroundColor: palette.pillBg, color: palette.pillText }}
+          >
             {entry.breakMinutes}m
           </span>
         </span>
