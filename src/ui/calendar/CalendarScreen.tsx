@@ -80,53 +80,53 @@ export function CalendarScreen({
     <>
       {view === "week" && (
         <div className="card overflow-hidden">
-          <div className="scroll-x-nice">
-            <div className="min-w-[660px]">
-              {/* dagkoppen */}
-              <div className="grid border-b border-line" style={{ gridTemplateColumns: "3rem repeat(7, 1fr)" }}>
-                <span />
-                {days.map((d) => (
-                  <Link
-                    key={d.key}
-                    href={d.href}
-                    className={`flex flex-col items-center gap-0.5 py-2 text-[13px] ${
-                      d.key === todayKey ? "text-accent" : "text-ink-soft"
+          {/* Geen horizontale scroller: het rooster past op de schermbreedte, zodat
+              verticaal scrollen (24-uursas) nooit met een horizontale as concurreert. */}
+          <div>
+            {/* dagkoppen */}
+            <div className="grid border-b border-line" style={{ gridTemplateColumns: "2.25rem repeat(7, 1fr)" }}>
+              <span />
+              {days.map((d) => (
+                <Link
+                  key={d.key}
+                  href={d.href}
+                  className={`flex flex-col items-center gap-0.5 py-2 text-[12px] ${
+                    d.key === todayKey ? "text-accent" : "text-ink-soft"
+                  }`}
+                >
+                  <span>{d.weekdayShort}</span>
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums ${
+                      d.key === todayKey ? "bg-accent text-white" : "text-ink"
                     }`}
                   >
-                    <span>{d.weekdayShort}</span>
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full font-semibold tabular-nums ${
-                        d.key === todayKey ? "bg-accent text-white" : "text-ink"
-                      }`}
-                    >
-                      {d.dayNumber}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-              {/* raster */}
-              <div className="grid" style={{ gridTemplateColumns: "3rem repeat(7, 1fr)" }}>
-                <HourAxis />
-                {days.map((d) => (
-                  <div
-                    key={d.key}
-                    className={`relative border-r border-line/60 last:border-r-0 ${
-                      d.key === todayKey ? "bg-accent-soft/30" : ""
-                    }`}
-                    style={{ height: GRID_PX }}
-                  >
-                    <HourLines />
-                    {(byDay.get(d.key) ?? []).map((e) => (
-                      <TimeBlock
-                        key={e.id}
-                        entry={e}
-                        locations={locations}
-                        onOpen={setOpened}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
+                    {d.dayNumber}
+                  </span>
+                </Link>
+              ))}
+            </div>
+            {/* raster */}
+            <div className="grid" style={{ gridTemplateColumns: "2.25rem repeat(7, 1fr)" }}>
+              <HourAxis />
+              {days.map((d) => (
+                <div
+                  key={d.key}
+                  className={`relative border-r border-line/60 last:border-r-0 ${
+                    d.key === todayKey ? "bg-accent-soft/30" : ""
+                  }`}
+                  style={{ height: GRID_PX }}
+                >
+                  <HourLines />
+                  {(byDay.get(d.key) ?? []).map((e) => (
+                    <TimeBlock
+                      key={e.id}
+                      entry={e}
+                      locations={locations}
+                      onOpen={setOpened}
+                    />
+                  ))}
+                </div>
+              ))}
             </div>
           </div>
         </div>

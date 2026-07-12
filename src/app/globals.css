@@ -68,16 +68,6 @@ button {
   margin-bottom: env(safe-area-inset-bottom);
 }
 
-/* Horizontale scrollgebieden (weekrooster) mogen verticaal scrollen nooit
-   gijzelen: géén touch-action: pan-x, wél overscroll-x insluiten. */
-@utility scroll-x-nice {
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-}
-
 /* ---- gedeelde formulier- en knopstijlen ---- */
 
 @layer components {
