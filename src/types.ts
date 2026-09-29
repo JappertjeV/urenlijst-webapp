@@ -2,11 +2,14 @@
 // server-side ingevuld voor de eigenaar — voor bezoekers bestaan ze niet in
 // de payload (niet "verborgen", maar echt weggelaten).
 
+// Publiek profiel (profielkiezer): bewust zonder gebruikersnaam.
 export type Profile = {
   id: string;
   name: string;
-  username: string;
 };
+
+// Eigen account — alleen voor de ingelogde gebruiker.
+export type Account = Profile & { username: string };
 
 export type LocationDTO = {
   id: string;

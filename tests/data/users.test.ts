@@ -3,6 +3,7 @@ import { useTestDb } from "../helpers/db";
 import {
   changePassword,
   createUser,
+  getAccount,
   listProfiles,
   verifyCredentials,
 } from "@/data/users";
@@ -21,9 +22,20 @@ describe("createUser", () => {
       password: "geheim123",
     });
     expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(await getAccount(result.id)).toEqual({
+      id: result.id,
+      name: "Jasper",
+      username: "jasper.v",
+    });
+  });
+
+  // Beveiligingsaudit 2026-09-29: de profiellijst is publiek (profielkiezer
+  // zonder login); de gebruikersnaam is de helft van de inloggegevens.
+  it("toont in de publieke profiellijst alleen id en naam", async () => {
     const profiles = await listProfiles();
-    expect(profiles.map((p) => p.username)).toContain("jasper.v");
-    expect(profiles.find((p) => p.username === "jasper.v")?.name).toBe("Jasper");
+    expect(profiles.length).toBeGreaterThan(0);
+    for (const p of profiles) expect(Object.keys(p).sort()).toEqual(["id", "name"]);
   });
 
   it("weigert lege naam of gebruikersnaam", async () => {
@@ -39,9 +51,20 @@ describe("createUser", () => {
     if (!result.ok) expect(result.error).toContain("Gebruikersnaam");
   });
 
-  it("weigert wachtwoorden korter dan 6 tekens", async () => {
-    expect(await createUser({ name: "X", username: "kortww", password: "12345" }))
-      .toEqual({ ok: false, error: "Wachtwoord moet minimaal 6 tekens zijn." });
+  it("weigert wachtwoorden korter dan 8 of langer dan 72 bytes (bcrypt-grens)", async () => {
+    expect(await createUser({ name: "X", username: "kortww", password: "1234567" }))
+      .toEqual({ ok: false, error: "Wachtwoord moet minimaal 8 tekens zijn." });
+    expect(await createUser({ name: "X", username: "langww", password: "a".repeat(73) }))
+      .toEqual({ ok: false, error: "Wachtwoord mag maximaal 72 tekens zijn." });
+  });
+
+  it("begrenst naam en gebruikersnaam", async () => {
+    expect(await createUser({ name: "X".repeat(61), username: "lang", password: "geheim123" }))
+      .toMatchObject({ ok: false });
+    expect(await createUser({ name: "X", username: "ab", password: "geheim123" }))
+      .toMatchObject({ ok: false });
+    expect(await createUser({ name: "X", username: "a".repeat(33), password: "geheim123" }))
+      .toMatchObject({ ok: false });
   });
 
   it("weigert een bestaande gebruikersnaam", async () => {
@@ -75,7 +98,7 @@ describe("changePassword", () => {
     });
     expect(await changePassword(created.id, "geheim123", "kort")).toEqual({
       ok: false,
-      error: "Nieuw wachtwoord moet minimaal 6 tekens zijn.",
+      error: "Nieuw wachtwoord moet minimaal 8 tekens zijn.",
     });
     expect(await changePassword(created.id, "geheim123", "nieuwgeheim")).toEqual({ ok: true });
     expect(await verifyCredentials("wwtest", "nieuwgeheim")).toBe(created.id);

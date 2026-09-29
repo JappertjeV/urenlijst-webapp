@@ -50,7 +50,7 @@ export function AccountSettings({
         </div>
         <div>
           <label className="label" htmlFor="new-password">
-            Nieuw wachtwoord (minimaal 6 tekens)
+            Nieuw wachtwoord (minimaal 8 tekens)
           </label>
           <input
             id="new-password"
@@ -58,7 +58,8 @@ export function AccountSettings({
             type="password"
             className="field"
             autoComplete="new-password"
-            minLength={6}
+            minLength={8}
+              maxLength={72}
             required
           />
         </div>

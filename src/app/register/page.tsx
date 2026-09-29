@@ -19,7 +19,14 @@ export default function RegisterPage() {
         <form action={action} className="flex flex-col gap-4">
           <div>
             <label className="label" htmlFor="name">Naam</label>
-            <input id="name" name="name" className="field" autoComplete="name" required />
+            <input
+              id="name"
+              name="name"
+              className="field"
+              autoComplete="name"
+              maxLength={60}
+              required
+            />
           </div>
           <div>
             <label className="label" htmlFor="username">Gebruikersnaam</label>
@@ -30,12 +37,14 @@ export default function RegisterPage() {
               autoComplete="username"
               autoCapitalize="none"
               autoCorrect="off"
+              minLength={3}
+              maxLength={32}
               required
             />
           </div>
           <div>
             <label className="label" htmlFor="password">
-              Wachtwoord (minimaal 6 tekens)
+              Wachtwoord (minimaal 8 tekens)
             </label>
             <input
               id="password"
@@ -43,7 +52,8 @@ export default function RegisterPage() {
               type="password"
               className="field"
               autoComplete="new-password"
-              minLength={6}
+              minLength={8}
+              maxLength={72}
               required
             />
           </div>

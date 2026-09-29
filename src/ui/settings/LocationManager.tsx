@@ -65,6 +65,7 @@ function LocationForm({
             name="name"
             className="field"
             defaultValue={location?.name ?? ""}
+            maxLength={60}
             placeholder="Bijv. Kantoor"
             required
           />

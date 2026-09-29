@@ -1,7 +1,10 @@
-import { prisma } from "./prisma";
+import type { Prisma } from "@prisma/client";
+import { prisma, writeTransaction } from "./prisma";
 import { fromDbDate, toDbDate } from "./db-dates";
+import { UserError } from "@/domain/errors";
 import { OVERLAP_MESSAGE, findOverlap } from "@/domain/overlap";
 import { workedMinutes } from "@/domain/time";
+import { LIMITS, assertDayKey, assertMaxLength, assertTimeRange } from "@/domain/validation";
 import type { EntryDTO } from "@/types";
 
 export type EntryInput = {
@@ -33,34 +36,41 @@ function toDTO(e: {
   };
 }
 
+// Controle + schrijven lopen in één transactie: anders kunnen twee
+// gelijktijdige verzoeken allebei "geen overlap" zien en allebei opslaan
+// (aangetoond met een regressietest bij de beveiligingsaudit).
 async function validate(
+  db: Prisma.TransactionClient,
   userId: string,
   input: EntryInput,
   excludeId?: string,
 ): Promise<void> {
+  assertDayKey(input.date);
+  assertTimeRange(input.startMinutes, input.endMinutes, input.breakMinutes);
   workedMinutes(input.startMinutes, input.endMinutes, input.breakMinutes);
-  const location = await prisma.location.findFirst({
+  if (input.note !== null) assertMaxLength(input.note, LIMITS.note, "Notitie");
+  const location = await db.location.findFirst({
     where: { id: input.locationId, userId },
     select: { archived: true },
   });
-  if (!location) throw new Error("Onbekende werklocatie.");
+  if (!location) throw new UserError("Onbekende werklocatie.");
   if (location.archived) {
     // Een bestaand blok mag zijn gearchiveerde locatie houden bij bewerken;
     // nieuwe blokken (of verhuizingen) naar een gearchiveerde locatie niet.
     const keepsLocation =
       excludeId !== undefined &&
-      (await prisma.entry.findFirst({
+      (await db.entry.findFirst({
         where: { id: excludeId, userId, locationId: input.locationId },
         select: { id: true },
       })) !== null;
-    if (!keepsLocation) throw new Error("Onbekende werklocatie.");
+    if (!keepsLocation) throw new UserError("Onbekende werklocatie.");
   }
-  const sameDay = await prisma.entry.findMany({
+  const sameDay = await db.entry.findMany({
     where: { userId, date: toDbDate(input.date) },
     select: { id: true, startMinutes: true, endMinutes: true },
   });
   if (findOverlap(input, sameDay, excludeId)) {
-    throw new Error(OVERLAP_MESSAGE);
+    throw new UserError(OVERLAP_MESSAGE);
   }
 }
 
@@ -82,17 +92,19 @@ export async function createEntry(
   userId: string,
   input: EntryInput,
 ): Promise<EntryDTO> {
-  await validate(userId, input);
-  const created = await prisma.entry.create({
-    data: {
-      userId,
-      locationId: input.locationId,
-      date: toDbDate(input.date),
-      startMinutes: input.startMinutes,
-      endMinutes: input.endMinutes,
-      breakMinutes: input.breakMinutes,
-      note: input.note,
-    },
+  const created = await writeTransaction(async (tx) => {
+    await validate(tx, userId, input);
+    return tx.entry.create({
+      data: {
+        userId,
+        locationId: input.locationId,
+        date: toDbDate(input.date),
+        startMinutes: input.startMinutes,
+        endMinutes: input.endMinutes,
+        breakMinutes: input.breakMinutes,
+        note: input.note,
+      },
+    });
   });
   return toDTO(created);
 }
@@ -102,22 +114,24 @@ export async function updateEntry(
   id: string,
   input: EntryInput,
 ): Promise<void> {
-  await validate(userId, input, id);
-  const result = await prisma.entry.updateMany({
-    where: { id, userId },
-    data: {
-      locationId: input.locationId,
-      date: toDbDate(input.date),
-      startMinutes: input.startMinutes,
-      endMinutes: input.endMinutes,
-      breakMinutes: input.breakMinutes,
-      note: input.note,
-    },
+  const result = await writeTransaction(async (tx) => {
+    await validate(tx, userId, input, id);
+    return tx.entry.updateMany({
+      where: { id, userId },
+      data: {
+        locationId: input.locationId,
+        date: toDbDate(input.date),
+        startMinutes: input.startMinutes,
+        endMinutes: input.endMinutes,
+        breakMinutes: input.breakMinutes,
+        note: input.note,
+      },
+    });
   });
-  if (result.count === 0) throw new Error("Urenblok niet gevonden.");
+  if (result.count === 0) throw new UserError("Urenblok niet gevonden.");
 }
 
 export async function deleteEntry(userId: string, id: string): Promise<void> {
   const result = await prisma.entry.deleteMany({ where: { id, userId } });
-  if (result.count === 0) throw new Error("Urenblok niet gevonden.");
+  if (result.count === 0) throw new UserError("Urenblok niet gevonden.");
 }

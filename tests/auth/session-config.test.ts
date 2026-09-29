@@ -3,6 +3,8 @@ import {
   SESSION_COOKIE_NAME,
   assertSessionSecret,
   cookieSecure,
+  fingerprintMatches,
+  sessionFingerprint,
 } from "@/auth/session-config";
 
 describe("cookieSecure", () => {
@@ -36,5 +38,23 @@ describe("assertSessionSecret", () => {
 describe("SESSION_COOKIE_NAME", () => {
   it("blijft gelijk aan de oude app zodat bestaande sessies niet dubbel aanmaken", () => {
     expect(SESSION_COOKIE_NAME).toBe("urenlijst_session");
+  });
+});
+
+describe("sessionFingerprint", () => {
+  const secret = "x".repeat(32);
+
+  it("is stabiel voor dezelfde hash en verschilt bij een andere hash of sleutel", () => {
+    const a = sessionFingerprint("$2b$10$hashA", secret);
+    expect(sessionFingerprint("$2b$10$hashA", secret)).toBe(a);
+    expect(sessionFingerprint("$2b$10$hashB", secret)).not.toBe(a);
+    expect(sessionFingerprint("$2b$10$hashA", "y".repeat(32))).not.toBe(a);
+  });
+
+  it("vergelijkt veilig, ook bij verschillende lengtes", () => {
+    const a = sessionFingerprint("h", secret);
+    expect(fingerprintMatches(a, a)).toBe(true);
+    expect(fingerprintMatches(a, a.slice(1))).toBe(false);
+    expect(fingerprintMatches(a, "")).toBe(false);
   });
 });

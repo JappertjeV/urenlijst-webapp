@@ -4,11 +4,12 @@ import { OVERLAP_MESSAGE } from "@/domain/overlap";
 
 // De actions praten met de echte datalaag; alleen sessie, cache en
 // navigatie van Next worden vervangen.
-const session = vi.hoisted(() => ({ userId: null as string | null }));
+const session = vi.hoisted(() => ({ userId: null as string | null, started: 0 }));
 
 vi.mock("@/auth/session", () => ({
   getCurrentUserId: async () => session.userId,
   startSession: async (id: string) => {
+    session.started += 1;
     session.userId = id;
   },
   endSession: async () => {
@@ -144,5 +145,73 @@ describe("changePasswordAction", () => {
       form({ currentPassword: "fout", newPassword: "nieuwgeheim" }),
     );
     expect(result).toEqual({ error: "Huidig wachtwoord klopt niet." });
+  });
+
+  it("geeft de eigen sessie na een wissel een nieuwe vingerafdruk", async () => {
+    const before = session.started;
+    const result = await changePasswordAction(
+      null,
+      form({ currentPassword: "geheim123", newPassword: "nieuwgeheim" }),
+    );
+    expect(result).toEqual({ ok: true });
+    expect(session.started).toBe(before + 1);
+    // terugzetten voor de tests hierna
+    await changePasswordAction(null, form({ currentPassword: "nieuwgeheim", newPassword: "geheim123" }));
+  });
+});
+
+// Beveiligingsaudit 2026-09-29: server actions zijn publieke POST-endpoints;
+// een zelfgebouwd verzoek kan alles bevatten wat de formulieren tegenhouden.
+describe("zelfgebouwde verzoeken", () => {
+  it("geeft bij onzin-tijden een nette melding, geen Prisma-details", async () => {
+    const userId = session.userId;
+    if (!userId) throw new Error("geen sessie");
+    const loc = await createLocation(userId, { name: "Ruw", color: "#123456", hourlyRate: 0 });
+    const result = await saveEntryAction(
+      null,
+      form({ date: "2026-07-02", locationId: loc.id, startMinutes: "abc", endMinutes: "abc" }),
+    );
+    expect(result).toEqual({ error: "Ongeldige tijd." });
+  });
+
+  it("weigert CSS in het kleurveld", async () => {
+    const result = await saveLocationAction(
+      null,
+      form({ name: "Truc", color: "red;background-image:url(http://evil.test/x)", hourlyRateEuros: "10" }),
+    );
+    expect(result).toEqual({ error: "Ongeldige kleur." });
+  });
+
+  it("weigert een oneindig of negatief tarief", async () => {
+    for (const hourlyRateEuros of ["1e400", "-5"]) {
+      const result = await saveLocationAction(
+        null,
+        form({ name: "Tarief", color: "#123456", hourlyRateEuros }),
+      );
+      expect(result).toEqual({ error: "Vul een geldig uurtarief in." });
+    }
+  });
+});
+
+describe("afremmen van inlogpogingen", () => {
+  it("remt na 5 fouten af — ook het juiste wachtwoord — maar alleen voor die gebruikersnaam", async () => {
+    await expect(
+      registerAction(null, form({ name: "Doel", username: "doelwit", password: "geheim123" })),
+    ).rejects.toThrow("REDIRECT:/");
+    session.userId = null;
+
+    for (let i = 0; i < 5; i++) {
+      expect(await loginAction(null, form({ username: "doelwit", password: `gok${i}` }))).toEqual({
+        error: "Onjuiste gebruikersnaam of wachtwoord.",
+      });
+    }
+    const blocked = await loginAction(null, form({ username: " DOELWIT", password: "geheim123" }));
+    expect(blocked).toMatchObject({ error: expect.stringMatching(/^Te veel pogingen/) });
+    expect(session.userId).toBeNull();
+
+    // een andere gebruiker kan gewoon inloggen
+    await expect(
+      loginAction(null, form({ username: "jasper", password: "geheim123" })),
+    ).rejects.toThrow("REDIRECT:/");
   });
 });
