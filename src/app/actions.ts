@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { endSession, getCurrentUserId, startSession } from "@/auth/session";
+import { throttles, waitMessage } from "@/auth/throttle";
+import { UserError } from "@/domain/errors";
 import { changePassword, createUser, verifyCredentials } from "@/data/users";
 import {
   createEntry,
@@ -38,8 +40,13 @@ async function requireUser(): Promise<string | null> {
 
 const NOT_LOGGED_IN = { error: "Niet ingelogd." } as const;
 
+// Alleen meldingen die voor de gebruiker bedoeld zijn gaan terug naar de
+// browser. Andere fouten (Prisma, bugs) bevatten schema- en querydetails;
+// die loggen we en vervangen we door de algemene melding.
 function asError(e: unknown, fallback: string): { error: string } {
-  return { error: e instanceof Error ? e.message : fallback };
+  if (e instanceof UserError) return { error: e.message };
+  console.error(e);
+  return { error: fallback };
 }
 
 // ---- account ----
@@ -48,8 +55,17 @@ export async function loginAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionResult> {
-  const userId = await verifyCredentials(str(formData, "username"), str(formData, "password"));
-  if (!userId) return { error: "Onjuiste gebruikersnaam of wachtwoord." };
+  const username = str(formData, "username").trim().toLowerCase();
+  // Per gebruikersnaam, ook voor namen die niet bestaan: anders verraadt
+  // het verschil in afremmen welke namen echt zijn.
+  const wait = throttles.login.retryAfterMs(username);
+  if (wait > 0) return { error: waitMessage(wait) };
+  const userId = await verifyCredentials(username, str(formData, "password"));
+  if (!userId) {
+    throttles.login.fail(username);
+    return { error: "Onjuiste gebruikersnaam of wachtwoord." };
+  }
+  throttles.login.reset(username);
   await startSession(userId);
   redirect("/");
 }
@@ -58,11 +74,21 @@ export async function registerAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionResult> {
-  const result = await createUser({
-    name: str(formData, "name"),
-    username: str(formData, "username"),
-    password: str(formData, "password"),
-  });
+  const wait = throttles.register.retryAfterMs("register");
+  if (wait > 0) return { error: waitMessage(wait) };
+  // Elke poging telt, ook geslaagde: dit remt zowel massaal aanmaken als
+  // het aftasten van bestaande gebruikersnamen af.
+  throttles.register.fail("register");
+  let result;
+  try {
+    result = await createUser({
+      name: str(formData, "name"),
+      username: str(formData, "username"),
+      password: str(formData, "password"),
+    });
+  } catch (e) {
+    return asError(e, "Account aanmaken mislukt.");
+  }
   if (!result.ok) return { error: result.error };
   await startSession(result.id);
   redirect("/");
@@ -79,12 +105,22 @@ export async function changePasswordAction(
 ): Promise<ActionResult> {
   const userId = await requireUser();
   if (!userId) return NOT_LOGGED_IN;
+  const wait = throttles.password.retryAfterMs(userId);
+  if (wait > 0) return { error: waitMessage(wait) };
   const result = await changePassword(
     userId,
     str(formData, "currentPassword"),
     str(formData, "newPassword"),
   );
-  return result.ok ? { ok: true } : { error: result.error };
+  if (!result.ok) {
+    if (result.error === "Huidig wachtwoord klopt niet.") throttles.password.fail(userId);
+    return { error: result.error };
+  }
+  throttles.password.reset(userId);
+  // Het nieuwe wachtwoord maakt alle bestaande sessies ongeldig (ook op
+  // andere apparaten); deze sessie krijgt meteen een nieuwe vingerafdruk.
+  await startSession(userId);
+  return { ok: true };
 }
 
 // ---- urenblokken ----

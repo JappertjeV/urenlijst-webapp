@@ -3,8 +3,8 @@ import { pickActiveProfile, stripRates, withRates } from "@/data/viewer";
 import type { LocationDTO, Profile } from "@/types";
 
 const profiles: Profile[] = [
-  { id: "u1", name: "Jasper", username: "jasper" },
-  { id: "u2", name: "Sam", username: "sam" },
+  { id: "u1", name: "Jasper" },
+  { id: "u2", name: "Sam" },
 ];
 
 describe("pickActiveProfile", () => {

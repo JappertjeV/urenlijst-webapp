@@ -1,3 +1,5 @@
+import { UserError } from "./errors";
+
 // Tijden zijn altijd hele minuten sinds middernacht (0–1439), 24-uursklok.
 
 export function workedMinutes(
@@ -6,11 +8,11 @@ export function workedMinutes(
   breakMinutes: number,
 ): number {
   if (endMinutes <= startMinutes) {
-    throw new Error("Eindtijd moet na begintijd liggen.");
+    throw new UserError("Eindtijd moet na begintijd liggen.");
   }
   const span = endMinutes - startMinutes;
   if (breakMinutes < 0 || breakMinutes >= span) {
-    throw new Error("Pauze is langer dan de gewerkte tijd.");
+    throw new UserError("Pauze is langer dan de gewerkte tijd.");
   }
   return span - breakMinutes;
 }

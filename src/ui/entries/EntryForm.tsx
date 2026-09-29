@@ -180,6 +180,7 @@ export function EntryForm({
             name="note"
             className="field"
             defaultValue={entry?.note ?? ""}
+            maxLength={500}
             placeholder="Bijv. avonddienst"
           />
         </div>

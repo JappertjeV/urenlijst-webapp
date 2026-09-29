@@ -1,12 +1,16 @@
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
+import { getPasswordHash } from "@/data/users";
 import {
   SESSION_COOKIE_NAME,
   assertSessionSecret,
   cookieSecure,
+  fingerprintMatches,
+  sessionFingerprint,
 } from "./session-config";
 
-export type SessionData = { userId?: string };
+// `fp` = vingerafdruk van de wachtwoord-hash (zie sessionFingerprint).
+export type SessionData = { userId?: string; fp?: string };
 
 export async function getSession() {
   // Eerst cookies lezen: tijdens statische prerendering laat Next de route
@@ -26,14 +30,24 @@ export async function getSession() {
   });
 }
 
+// Alleen een geldige sessie telt: de gebruiker moet nog bestaan en het
+// wachtwoord mag sinds het inloggen niet gewijzigd zijn. Sessies van vóór
+// deze controle hebben geen `fp` en vervallen dus eenmalig.
 export async function getCurrentUserId(): Promise<string | null> {
   const session = await getSession();
-  return session.userId ?? null;
+  if (!session.userId || !session.fp) return null;
+  const hash = await getPasswordHash(session.userId);
+  if (!hash) return null;
+  const expected = sessionFingerprint(hash, assertSessionSecret(process.env.SESSION_SECRET));
+  return fingerprintMatches(session.fp, expected) ? session.userId : null;
 }
 
 export async function startSession(userId: string): Promise<void> {
+  const hash = await getPasswordHash(userId);
+  if (!hash) throw new Error("Gebruiker bestaat niet.");
   const session = await getSession();
   session.userId = userId;
+  session.fp = sessionFingerprint(hash, assertSessionSecret(process.env.SESSION_SECRET));
   await session.save();
 }
 

@@ -9,6 +9,7 @@ import {
   updateEntry,
 } from "@/data/entries";
 import { OVERLAP_MESSAGE } from "@/domain/overlap";
+import { UserError } from "@/domain/errors";
 
 let cleanup: () => void;
 let owner: string;
@@ -160,5 +161,55 @@ describe("updateEntry / deleteEntry", () => {
     await deleteEntry(owner, entry.id);
     const list = await listEntries(owner, { from: "2026-09-04", to: "2026-09-04" });
     expect(list.find((e) => e.id === entry.id)).toBeUndefined();
+  });
+});
+
+// Beveiligingsaudit 2026-09-29: server actions zijn publieke endpoints, dus
+// alles wat de formulieren normaal afdwingen moet de datalaag zelf checken.
+describe("invoercontrole (zelfgebouwde verzoeken)", () => {
+  it.each([
+    ["NaN-tijden", { startMinutes: NaN, endMinutes: NaN }],
+    ["negatieve start", { startMinutes: -600, endMinutes: 60 }],
+    ["eind voorbij 24:00", { startMinutes: 60, endMinutes: 99_999 }],
+    ["gebroken minuten", { startMinutes: 60.5, endMinutes: 120 }],
+    ["negatieve pauze", { startMinutes: 60, endMinutes: 120, breakMinutes: -30 }],
+  ])("weigert %s met een nette melding", async (_label, times) => {
+    await expect(
+      createEntry(owner, { ...base, breakMinutes: 0, ...times, date: "2026-08-01", locationId }),
+    ).rejects.toThrow(UserError);
+  });
+
+  it.each(["garbage", "2026-02-31", "2026-7-1", "1850-01-01", ""])(
+    "weigert ongeldige datum %j",
+    async (date) => {
+      await expect(createEntry(owner, { ...base, date, locationId })).rejects.toThrow(
+        "Ongeldige datum.",
+      );
+    },
+  );
+
+  it("weigert notities langer dan de limiet", async () => {
+    await expect(
+      createEntry(owner, { ...base, date: "2026-08-02", locationId, note: "x".repeat(501) }),
+    ).rejects.toThrow(UserError);
+  });
+
+  it("accepteert een blok tot precies 24:00", async () => {
+    const entry = await createEntry(owner, {
+      ...base, date: "2026-08-03", startMinutes: 1380, endMinutes: 1440, breakMinutes: 0, locationId,
+    });
+    expect(entry.endMinutes).toBe(1440);
+  });
+});
+
+describe("gelijktijdige verzoeken", () => {
+  it("laat van twee overlappende gelijktijdige blokken er hooguit één toe", async () => {
+    const date = "2026-09-01";
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 6 }, () => createEntry(owner, { ...base, date, locationId })),
+    );
+    const list = await listEntries(owner, { from: date, to: date });
+    expect(list).toHaveLength(1);
+    expect(attempts.filter((a) => a.status === "fulfilled")).toHaveLength(1);
   });
 });

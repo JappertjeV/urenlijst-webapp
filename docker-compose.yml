@@ -16,6 +16,11 @@ services:
     volumes:
       - urenlijst-data:/data
     restart: unless-stopped
+    # De app draait als `node`; de entrypoint start alleen als root om /data
+    # over te dragen. Dit voorkomt dat het proces daarna ooit weer rechten
+    # kan verkrijgen (setuid-binaries e.d.).
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/ || exit 1"]
       interval: 30s

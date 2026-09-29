@@ -1,6 +1,15 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { fromDbDate, toDbDate } from "./db-dates";
+import { UserError } from "@/domain/errors";
 import type { RateChange } from "@/domain/rates";
+import {
+  LIMITS,
+  assertDayKey,
+  assertMaxLength,
+  assertRateCents,
+  isHexColor,
+} from "@/domain/validation";
 import type { LocationDTO, RateDTO } from "@/types";
 
 const locationSelect = {
@@ -29,10 +38,26 @@ export async function listAllLocations(userId: string): Promise<LocationDTO[]> {
   });
 }
 
+type LocationFields = { name: string; color: string; hourlyRate: number };
+
+function validateLocation(data: Partial<LocationFields>): void {
+  if (data.name !== undefined) {
+    if (!data.name.trim()) throw new UserError("Vul een naam in.");
+    assertMaxLength(data.name, LIMITS.name, "Naam");
+  }
+  if (data.color !== undefined && !isHexColor(data.color)) {
+    throw new UserError("Ongeldige kleur.");
+  }
+  if (data.hourlyRate !== undefined) {
+    assertRateCents(data.hourlyRate, { allowZero: true });
+  }
+}
+
 export async function createLocation(
   userId: string,
-  data: { name: string; color: string; hourlyRate: number },
+  data: LocationFields,
 ): Promise<LocationDTO> {
+  validateLocation(data);
   return prisma.location.create({
     data: { ...data, userId },
     select: locationSelect,
@@ -42,10 +67,11 @@ export async function createLocation(
 export async function updateLocation(
   userId: string,
   id: string,
-  data: Partial<{ name: string; color: string; hourlyRate: number }>,
+  data: Partial<LocationFields>,
 ): Promise<void> {
+  validateLocation(data);
   const result = await prisma.location.updateMany({ where: { id, userId }, data });
-  if (result.count === 0) throw new Error("Locatie niet gevonden.");
+  if (result.count === 0) throw new UserError("Locatie niet gevonden.");
 }
 
 export async function archiveLocation(userId: string, id: string): Promise<void> {
@@ -53,7 +79,7 @@ export async function archiveLocation(userId: string, id: string): Promise<void>
     where: { id, userId },
     data: { archived: true },
   });
-  if (result.count === 0) throw new Error("Locatie niet gevonden.");
+  if (result.count === 0) throw new UserError("Locatie niet gevonden.");
 }
 
 async function assertOwnsLocation(userId: string, locationId: string): Promise<void> {
@@ -61,7 +87,7 @@ async function assertOwnsLocation(userId: string, locationId: string): Promise<v
     where: { id: locationId, userId },
     select: { id: true },
   });
-  if (!location) throw new Error("Locatie niet gevonden.");
+  if (!location) throw new UserError("Locatie niet gevonden.");
 }
 
 export async function listLocationRates(
@@ -86,6 +112,8 @@ export async function addLocationRate(
   hourlyRate: number,
   validFrom: string,
 ): Promise<void> {
+  assertRateCents(hourlyRate, { allowZero: false });
+  assertDayKey(validFrom, "Kies een geldige ingangsdatum.");
   await assertOwnsLocation(userId, locationId);
   await prisma.locationRate.upsert({
     where: { locationId_validFrom: { locationId, validFrom: toDbDate(validFrom) } },
@@ -100,7 +128,7 @@ async function assertOwnsRate(userId: string, rateId: string): Promise<void> {
     select: { location: { select: { userId: true } } },
   });
   if (!rate || rate.location.userId !== userId) {
-    throw new Error("Tarief niet gevonden.");
+    throw new UserError("Tarief niet gevonden.");
   }
 }
 
@@ -109,11 +137,21 @@ export async function updateLocationRate(
   rateId: string,
   data: { hourlyRate: number; validFrom: string },
 ): Promise<void> {
+  assertRateCents(data.hourlyRate, { allowZero: false });
+  assertDayKey(data.validFrom, "Kies een geldige ingangsdatum.");
   await assertOwnsRate(userId, rateId);
-  await prisma.locationRate.update({
-    where: { id: rateId },
-    data: { hourlyRate: data.hourlyRate, validFrom: toDbDate(data.validFrom) },
-  });
+  try {
+    await prisma.locationRate.update({
+      where: { id: rateId },
+      data: { hourlyRate: data.hourlyRate, validFrom: toDbDate(data.validFrom) },
+    });
+  } catch (e) {
+    // Unieke (locatie, ingangsdatum): een tweede tarief op dezelfde dag.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw new UserError("Er is al een tarief met die ingangsdatum.");
+    }
+    throw e;
+  }
 }
 
 export async function deleteLocationRate(userId: string, rateId: string): Promise<void> {
