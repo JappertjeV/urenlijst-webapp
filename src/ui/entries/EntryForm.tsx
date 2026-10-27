@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { startTransition, useActionState, useMemo, useState } from "react";
 import {
   deleteEntryAction,
   saveEntryAction,
@@ -107,7 +107,23 @@ export function EntryForm({
 
   return (
     <div className="flex flex-col gap-4">
-      <form action={save} className="flex flex-col gap-4">
+      {/* Opslaan via onSubmit i.p.v. alleen `action`: bij een form-action
+          reset React 19 het formulier ook als de action een fout teruggeeft.
+          Die reset zette de gecontroleerde tijd-selects zichtbaar op 00:00
+          terwijl state en hidden inputs 09:00–17:00 hielden — een tweede
+          klik sloeg dus iets anders op dan er stond (overlap-foutmelding).
+          Met preventDefault + zelf startTransition blijft alles staan.
+          `action` blijft voor het no-JS-pad: React rendert dan een guard
+          i.p.v. een GET met de velden in de URL. */}
+      <form
+        action={save}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const formData = new FormData(e.currentTarget);
+          startTransition(() => save(formData));
+        }}
+        className="flex flex-col gap-4"
+      >
         {entry && <input type="hidden" name="id" value={entry.id} />}
         <input type="hidden" name="startMinutes" value={start} />
         <input type="hidden" name="endMinutes" value={end} />
