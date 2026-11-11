@@ -1,0 +1,52 @@
+# Reusable check that a PR starts with the three plain-language parts Jasper reads on his
+# phone before merging: what changes, what the risk is, what he should look at (plan,
+# "Beheer op afstand"). AI sessions often write the PR body with `gh pr create --body`, which
+# skips the template, so the template alone is not enough; this check makes it hold.
+# Bots (Renovate) are skipped: their header comes from the Renovate preset.
+#
+# Caller:
+#   on: { pull_request: { types: [opened, edited, synchronize, reopened] } }
+#   jobs:
+#     description:
+#       uses: JappertjeV/ci-workflows/.github/workflows/pr-description.yml@<sha> # v1.x
+name: pr-description
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        default: '"ubuntu-latest"'
+
+permissions:
+  contents: read
+
+jobs:
+  description:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 5
+    if: github.event.pull_request.user.type != 'Bot'
+    steps:
+      - name: Plain-language header present
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          missing=()
+          for h in "Wat verandert er" "Risico" "Wat moet Jasper zien"; do
+            printf '%s\n' "$BODY" | grep -qiE "^#{1,3} *$h" || missing+=("$h")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::De PR-beschrijving mist de kop(pen): ${missing[*]}. Gebruik het sjabloon (.github/pull_request_template.md in ci-workflows): drie korte stukjes in gewone taal bovenaan."
+            exit 1
+          fi
+          # A template left empty is as useless as none: each part needs a line of its own text.
+          empty=$(printf '%s\n' "$BODY" | awk '
+            /^#{1,3} *(Wat verandert er|Risico|Wat moet Jasper zien)/ { if (h != "" && n == 0) print h; h=$0; n=0; next }
+            /^#/ { if (h != "" && n == 0) print h; h=""; next }
+            h != "" && $0 !~ /^[[:space:]]*(<!--.*-->)?[[:space:]]*$/ { n++ }
+            END { if (h != "" && n == 0) print h }')
+          if [ -n "$empty" ]; then
+            echo "::error::Deze kop(pen) zijn nog leeg: $(echo "$empty" | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "PR description OK."

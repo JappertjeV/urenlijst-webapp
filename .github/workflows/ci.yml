@@ -1,0 +1,50 @@
+# Shared checks from JappertjeV/ci-workflows (plan "GitOps en CI"), on GitHub's runners.
+# GitHub lets only private repos call a reusable workflow from a private repo, so this public
+# repo has exact copies of node-check, security, main-guard and pr-description next to this
+# file. Never edit those copies here: replace them from ci-workflows (its prive/README.md);
+# a weekly check there reports when they differ.
+name: ci
+
+on:
+  # Every branch: sessions see their branch green before they open the PR. No pull_request
+  # trigger for the checks themselves, or every PR commit would run twice.
+  push:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  schedule:
+    # Sunday 05:00 UTC: the weekly full security scan over the whole history.
+    - cron: "0 5 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  # Never cancel on main: the guard must see every push there.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/node-check.yml
+
+  security:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/security.yml
+    with:
+      mode: ${{ github.event_name == 'schedule' && 'full' || 'push' }}
+
+  guard:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      issues: write
+    uses: ./.github/workflows/main-guard.yml
+
+  pr-description:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pr-description.yml

@@ -1,0 +1,141 @@
+# Reusable "watcher" for main. On GitHub Free a private repo cannot require a PR or green
+# checks before merging (Jasper 11-11-2026: stay on Free), so this reports afterwards instead:
+# every commit that lands on the branch must belong to a merged PR whose checks were green at
+# the moment it was merged. Otherwise it opens an issue assigned to Jasper (a push
+# notification in the GitHub app) and turns red. It blocks nothing; the Mac hook and the
+# deploy gate do the stopping (plan, "Rem zonder beschermde branches").
+#
+# Caller (.github/workflows/main-guard.yml in the app repo):
+#   on: { push: { branches: [main] } }
+#   permissions: { contents: read, pull-requests: read, checks: read, statuses: read, issues: write }
+#   jobs:
+#     guard:
+#       uses: JappertjeV/ci-workflows/.github/workflows/main-guard.yml@<sha> # v1.x
+name: main-guard
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: 'runs-on as JSON: "ubuntu-latest" (default) or ["self-hosted","shared-test"].'
+        type: string
+        default: '"ubuntu-latest"'
+      notify:
+        description: "GitHub login that gets the issue assigned."
+        type: string
+        default: JappertjeV
+      allowed-actors:
+        description: "Logins (comma separated) whose direct pushes are expected, e.g. a release bot. Empty: nobody."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+  issues: write
+
+jobs:
+  guard:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          NOTIFY: ${{ inputs.notify }}
+          ALLOWED: ${{ inputs.allowed-actors }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const p = context.payload;
+            const branch = context.ref.replace('refs/heads/', '');
+            const allowed = (process.env.ALLOWED || '').split(',').map(s => s.trim()).filter(Boolean);
+            const actor = context.actor;
+            if (context.eventName !== 'push') { core.setFailed('main-guard only works on push events.'); return; }
+            if (allowed.includes(actor)) { core.info(`${actor} is allowed to push directly.`); return; }
+            if (p.deleted) { core.info('Branch deleted; nothing to check.'); return; }
+
+            const problems = [];
+            const isZero = s => !s || /^0+$/.test(s);
+            if (p.forced) problems.push(`Er is **geforceerd gepusht** naar \`${branch}\` (de geschiedenis is herschreven).`);
+
+            // The commits of this push. A new branch, or the first push, has no "before".
+            let shas = [p.after];
+            if (!isZero(p.before) && !p.forced) {
+              const cmp = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${p.before}...${p.after}`, per_page: 100 });
+              shas = cmp.data.commits.map(c => c.sha);
+              if (cmp.data.total_commits > shas.length) problems.push(`Deze push bevat ${cmp.data.total_commits} commits; alleen de eerste ${shas.length} zijn bekeken.`);
+            }
+            // GitHub links a commit to its PR a moment after the merge; ask twice before
+            // concluding there is none.
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+            async function prsFor(sha) {
+              for (let i = 0; i < 2; i++) {
+                const r = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
+                const merged = r.data.filter(pr => pr.merged_at && pr.base.ref === branch);
+                if (merged.length) return merged;
+                if (i === 0) await sleep(20000);
+              }
+              return [];
+            }
+
+            const prs = new Map();
+            const orphans = [];
+            for (const sha of shas) {
+              const found = await prsFor(sha);
+              if (!found.length) orphans.push(sha);
+              for (const pr of found) prs.set(pr.number, pr);
+            }
+            if (orphans.length) problems.push(`Commits zonder samengevoegde PR naar \`${branch}\`: ${orphans.map(s => '`' + s.slice(0, 7) + '`').join(', ')}. Iemand heeft rechtstreeks gepusht.`);
+
+            // Were the PR's checks green when it was merged? Runs that started after the
+            // merge (this guard, a deploy) do not count. Per check name only the latest run
+            // before the merge counts, so a red run that was re-run green is fine.
+            const bad = ['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure', 'stale'];
+            for (const pr of prs.values()) {
+              const mergedAt = new Date(pr.merged_at);
+              const runs = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 });
+              const latest = new Map();
+              for (const r of runs) {
+                if (!r.started_at || new Date(r.started_at) > mergedAt) continue;
+                const prev = latest.get(r.name);
+                if (!prev || new Date(r.started_at) > new Date(prev.started_at)) latest.set(r.name, r);
+              }
+              const status = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: pr.head.sha });
+              const statuses = status.data.statuses.filter(s => new Date(s.created_at) <= mergedAt);
+              const red = [...latest.values()].filter(r => bad.includes(r.conclusion)).map(r => r.name)
+                .concat(statuses.filter(s => ['failure', 'error'].includes(s.state)).map(s => s.context));
+              const running = [...latest.values()].filter(r => !r.completed_at || new Date(r.completed_at) > mergedAt).map(r => r.name)
+                .concat(statuses.filter(s => s.state === 'pending').map(s => s.context));
+              const green = [...latest.values()].filter(r => r.conclusion === 'success' && new Date(r.completed_at) <= mergedAt).length
+                + statuses.filter(s => s.state === 'success').length;
+              const link = `PR #${pr.number} (${pr.title})`;
+              if (red.length) problems.push(`${link} is samengevoegd terwijl deze controles **rood** waren: ${red.join(', ')}.`);
+              if (running.length) problems.push(`${link} is samengevoegd terwijl deze controles **nog liepen**: ${running.join(', ')}.`);
+              if (!red.length && !running.length && green === 0) problems.push(`${link} is samengevoegd **zonder enige groene controle**.`);
+            }
+
+            if (!problems.length) { core.info(`OK: ${shas.length} commit(s), all from merged PRs with green checks.`); return; }
+
+            const short = p.after.slice(0, 7);
+            const body = [
+              `De wachter zag iets op \`${branch}\` dat niet via een groene PR ging (push door \`${actor}\`, commit \`${short}\`).`,
+              '',
+              '**Wat er is gebeurd**',
+              ...problems.map(x => `- ${x}`),
+              '',
+              '**Wat je moet doen**',
+              '- Kijk of de wijziging klopt. Is het fout, draai de commit terug met een PR.',
+              '- Rode of overgeslagen controle: open de laatste run hieronder en kijk of hij nu groen is.',
+              '- Klopt alles, sluit dit issue.',
+              '',
+              `Run: ${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+            ].join('\n');
+            const issue = await github.rest.issues.create({
+              owner, repo,
+              title: `Wachter: ${branch} kreeg ${short} zonder PR of groene controle`,
+              body,
+              assignees: [process.env.NOTIFY].filter(Boolean),
+            });
+            core.setFailed(`Reported in issue #${issue.data.number}:\n${problems.join('\n')}`);

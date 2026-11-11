@@ -1,0 +1,147 @@
+# Reusable check for Node projects: install from the lockfile, lint, typecheck, test, build.
+# One shared template so every VGE repo gets the same check from a ten-line caller, and an
+# improvement here reaches every repo through one Renovate PR (plan "GitOps en CI", 11-11-2026).
+#
+# Caller (in the app repo, .github/workflows/ci.yml):
+#   jobs:
+#     check:
+#       uses: JappertjeV/ci-workflows/.github/workflows/node-check.yml@<sha> # v1.x
+#       with:
+#         test: pnpm test
+#
+# Every command is a shell line run in `working-directory`; an empty string skips that step.
+# $PM is set to pnpm or npm, whichever lockfile the repo has.
+name: node-check
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: 'runs-on as JSON: "ubuntu-latest" (default) or ["self-hosted","shared-test"] for the shared test runner on the CI VM.'
+        type: string
+        default: '"ubuntu-latest"'
+      working-directory:
+        type: string
+        default: "."
+      node-version:
+        description: "Node version; empty means .nvmrc / .node-version / package.json engines, else 24."
+        type: string
+        default: ""
+      install:
+        description: "Install command. Default: pnpm install --frozen-lockfile or npm ci."
+        type: string
+        default: ""
+      lint:
+        type: string
+        default: "$PM run --if-present lint"
+      typecheck:
+        type: string
+        default: "$PM run --if-present typecheck"
+      test:
+        description: "Not --if-present on purpose: a repo without tests should say so with test: '' instead of passing silently."
+        type: string
+        default: "$PM test"
+      build:
+        type: string
+        default: "$PM run --if-present build"
+      timeout-minutes:
+        type: number
+        default: 30
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    env:
+      CI: "1"
+    steps:
+      # Pinned to a commit: a moved tag would run new code (CI review 11-11-2026). No stored
+      # token: nothing here pushes, and every install script could otherwise read it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # On the CI VM a heavy step waits for /srv/ci/.lock, the one-check-at-a-time lock that
+      # ci-run and the app runners share (12 GB VM). The shared test runner does not take it
+      # itself (images session, 11-11-2026), so the template does. GitHub's runners skip it.
+      - name: Lock helper (CI VM)
+        run: |
+          cat > "$RUNNER_TEMP/locked" <<'SH'
+          #!/usr/bin/env bash
+          # locked <command...>: runs it under /srv/ci/.lock on a self-hosted runner, at most
+          # 45 minutes waiting (exit 75 from flock means the wait ran out).
+          if [ "${RUNNER_ENVIRONMENT:-}" != self-hosted ]; then exec "$@"; fi
+          echo "Waiting for /srv/ci/.lock (CI VM: one heavy check at a time) ..."
+          flock -w 2700 -E 75 /srv/ci/.lock "$@"
+          rc=$?
+          if [ "$rc" = 75 ]; then echo "::error::Waited 45 minutes for /srv/ci/.lock. Who holds it: sudo fuser -v /srv/ci/.lock on ai-ci (vault runbook \"CI-runner gebruiken en een project toevoegen\")."; fi
+          exit "$rc"
+          SH
+          chmod +x "$RUNNER_TEMP/locked"
+
+      # The lockfile decides the package manager. No lockfile is an error: an install without
+      # one is not reproducible, and Renovate's lockfile maintenance has nothing to keep.
+      - name: Detect package manager
+        id: pm
+        # Inputs go through env, never straight into the script (no shell injection via ${{ }}).
+        env:
+          DIR: ${{ inputs.working-directory }}
+          NODE_VERSION: ${{ inputs.node-version }}
+        run: |
+          if [ -f pnpm-lock.yaml ]; then echo "pm=pnpm" >> "$GITHUB_OUTPUT"
+          elif [ -f package-lock.json ]; then echo "pm=npm" >> "$GITHUB_OUTPUT"
+          else echo "::error::No pnpm-lock.yaml or package-lock.json in $DIR: commit a lockfile."; exit 1; fi
+          v="$NODE_VERSION"
+          [ -n "$v" ] || { [ -f .nvmrc ] && v=$(tr -d ' \n' < .nvmrc); }
+          [ -n "$v" ] || { [ -f .node-version ] && v=$(tr -d ' \n' < .node-version); }
+          [ -n "$v" ] || v=$(node -e 'try{const e=require("./package.json").engines?.node||"";const m=e.match(/\d+/);console.log(m?m[0]:"")}catch{console.log("")}' 2>/dev/null || true)
+          echo "node=${v:-24}" >> "$GITHUB_OUTPUT"
+
+      # Reads the version from "packageManager" in package.json; without that field the
+      # action fails, which is the hint to add it.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: steps.pm.outputs.pm == 'pnpm'
+        with:
+          package_json_file: ${{ inputs.working-directory }}/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ steps.pm.outputs.node }}
+          cache: ${{ steps.pm.outputs.pm }}
+          cache-dependency-path: ${{ inputs.working-directory }}/${{ steps.pm.outputs.pm == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json' }}
+
+      - name: Install (lockfile must match package.json)
+        env:
+          PM: ${{ steps.pm.outputs.pm }}
+          CMD: ${{ inputs.install }}
+        run: |
+          if [ -z "$CMD" ]; then
+            if [ "$PM" = pnpm ]; then CMD="pnpm install --frozen-lockfile"; else CMD="npm ci"; fi
+          fi
+          "$RUNNER_TEMP/locked" bash -e -c "$CMD"
+
+      - name: Lint
+        if: inputs.lint != ''
+        env: { PM: "${{ steps.pm.outputs.pm }}", CMD: "${{ inputs.lint }}" }
+        run: '"$RUNNER_TEMP/locked" bash -e -c "$CMD"'
+
+      - name: Typecheck
+        if: inputs.typecheck != ''
+        env: { PM: "${{ steps.pm.outputs.pm }}", CMD: "${{ inputs.typecheck }}" }
+        run: '"$RUNNER_TEMP/locked" bash -e -c "$CMD"'
+
+      - name: Test
+        if: inputs.test != ''
+        env: { PM: "${{ steps.pm.outputs.pm }}", CMD: "${{ inputs.test }}" }
+        run: '"$RUNNER_TEMP/locked" bash -e -c "$CMD"'
+
+      - name: Build
+        if: inputs.build != ''
+        env: { PM: "${{ steps.pm.outputs.pm }}", CMD: "${{ inputs.build }}" }
+        run: '"$RUNNER_TEMP/locked" bash -e -c "$CMD"'

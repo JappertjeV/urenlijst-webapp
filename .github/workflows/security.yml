@@ -1,0 +1,235 @@
+# Reusable security scans. Two modes, so one caller file covers both moments:
+#   mode: push  (every push / PR)  gitleaks over the files and the new commits (blocks),
+#                                  dependency audit of production packages (warning only)
+#   mode: full  (weekly schedule)  gitleaks over the whole history (blocks), audit of all
+#                                  packages (red at high), Semgrep (report only, artifact)
+# Taken over from Vilt-Create's ci.yml/security.yml (CI review 11-11-2026): gitleaks as a
+# binary pinned by checksum (gitleaks-action needs a paid licence for an organisation),
+# --redact so a found value never reaches the log, Semgrep with --metrics=off. Code scanning
+# on GitHub needs Advanced Security, which a free organisation lacks, so results are in the
+# log and as an artifact.
+#
+# Caller:
+#   on: { push: {}, pull_request: {}, schedule: [{ cron: "0 5 * * 0" }] }
+#   jobs:
+#     security:
+#       uses: JappertjeV/ci-workflows/.github/workflows/security.yml@<sha> # v1.x
+#       with:
+#         mode: ${{ github.event_name == 'schedule' && 'full' || 'push' }}
+name: security
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: 'runs-on as JSON: "ubuntu-latest" (default) or ["self-hosted","shared-test"].'
+        type: string
+        default: '"ubuntu-latest"'
+      mode:
+        description: "push or full (see the top of this file)."
+        type: string
+        default: push
+      working-directory:
+        description: "Where the lockfile / requirements.txt is, for the dependency audit."
+        type: string
+        default: "."
+      audit:
+        description: "auto (pnpm, npm or pip-audit from the lockfile), or none."
+        type: string
+        default: auto
+      audit-level:
+        description: "Lowest npm/pnpm severity that turns the full scan red."
+        type: string
+        default: high
+      semgrep-config:
+        description: "Semgrep rule packs, space separated (full mode only)."
+        type: string
+        default: "p/default p/secrets"
+
+permissions:
+  contents: read
+
+env:
+  # Pinned by checksum, from the release's own checksums file. Raised by hand (see README).
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+  PIP_AUDIT_VERSION: "2.10.1"
+  SEMGREP_VERSION: "1.184.0"
+  UV_VERSION: "0.13.7"
+  UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+
+jobs:
+  secrets:
+    name: secrets (gitleaks)
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit range and the full history need the history.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch gitleaks (checksum checked)
+        run: |
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tgz" "$url"
+          echo "$GITLEAKS_SHA256  $RUNNER_TEMP/gitleaks.tgz" | sha256sum -c - >/dev/null \
+            || { echo "::error::gitleaks $GITLEAKS_VERSION: checksum does not match"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/bin" && tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP/bin" gitleaks
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # The files of this commit. A repo's own .gitleaks.toml (allowed test values) is used
+      # automatically.
+      - name: Scan files
+        if: inputs.mode != 'full'
+        run: gitleaks dir . --redact --verbose --no-banner --exit-code 1
+
+      # The new commits too: a key that was added and removed again in the same push or PR is
+      # gone from the files but still in the history that gets pushed.
+      - name: Scan new commits
+        if: inputs.mode != 'full'
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          range=""
+          if [ "$EVENT" = pull_request ] && [ -n "$PR_BASE" ]; then range="$PR_BASE..$PR_HEAD"
+          elif [ "$EVENT" = push ] && [ -n "$BEFORE" ] && [ "${BEFORE//0/}" != "" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then range="$BEFORE..$AFTER"
+          fi
+          if [ -z "$range" ]; then echo "No earlier commit to compare with (new branch or manual run): the file scan above covers this run."; exit 0; fi
+          gitleaks git . --log-opts="$range" --redact --verbose --no-banner --exit-code 1
+
+      # Every commit of every pushed branch. A finding stays in the history: rotate the secret;
+      # rewriting history is Jasper's decision.
+      - name: Scan whole history
+        if: inputs.mode == 'full'
+        run: gitleaks git . --log-opts="--all" --redact --verbose --no-banner --exit-code 1
+
+  audit:
+    name: dependencies (audit)
+    if: inputs.audit != 'none'
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # Python through uv, not actions/setup-python: that has no builds for the Debian 13 CI VM
+      # ("The version '3.12' ... was not found for Debian 13", 11-11-2026). uv's standalone
+      # Pythons run on any Linux; uv itself is pinned by checksum.
+      - name: Python (uv, checksum checked)
+        env:
+          PY: "3.12"
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/uv.tgz" "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$UV_SHA256  $RUNNER_TEMP/uv.tgz" | sha256sum -c - >/dev/null || { echo "::error::uv: checksum does not match"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/uv" && tar -xzf "$RUNNER_TEMP/uv.tgz" -C "$RUNNER_TEMP/uv" --strip-components=1
+          UV_PYTHON_PREFERENCE=only-managed UV_PYTHON_INSTALL_DIR="$RUNNER_TEMP/uv-python" UV_CACHE_DIR="$RUNNER_TEMP/uv-cache" \
+            "$RUNNER_TEMP/uv/uv" venv --quiet --seed --python "$PY" "$RUNNER_TEMP/python"
+          echo "$RUNNER_TEMP/python/bin" >> "$GITHUB_PATH"
+
+      # push mode: production packages only, and a warning instead of red: a new advisory for
+      # an old package must not block unrelated work; Renovate opens the fix right away.
+      # full mode: everything, red at audit-level, so the weekly run mails a failure.
+      - name: Audit
+        env:
+          MODE: ${{ inputs.mode }}
+          LEVEL: ${{ inputs.audit-level }}
+        run: |
+          set +e
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable --install-directory "$RUNNER_TEMP/bin" && export PATH="$RUNNER_TEMP/bin:$PATH"
+            if [ "$MODE" = full ]; then pnpm audit --audit-level "$LEVEL"; else pnpm audit --prod --audit-level "$LEVEL"; fi
+          elif [ -f package-lock.json ]; then
+            if [ "$MODE" = full ]; then npm audit --audit-level="$LEVEL"; else npm audit --omit=dev --audit-level="$LEVEL"; fi
+          elif ls requirements*.txt >/dev/null 2>&1; then
+            python -m venv "$RUNNER_TEMP/audit-venv" && "$RUNNER_TEMP/audit-venv/bin/pip" install -q "pip-audit==$PIP_AUDIT_VERSION"
+            args=(); for f in requirements*.txt; do
+              # Dev requirements only in the full scan, like --prod for Node.
+              case "$f" in *dev*|*test*) [ "$MODE" = full ] || continue;; esac
+              args+=(-r "$f"); done
+            "$RUNNER_TEMP/audit-venv/bin/pip-audit" "${args[@]}" --progress-spinner off
+          else
+            echo "No lockfile or requirements file: nothing to audit."; exit 0
+          fi
+          rc=$?
+          if [ "$rc" -ne 0 ] && [ "$MODE" != full ]; then
+            echo "::warning::Dependency audit found known vulnerabilities (see the log). Not blocking on a push; the weekly full scan turns red and Renovate proposes the fix."
+            exit 0
+          fi
+          exit "$rc"
+
+  semgrep:
+    name: static analysis (Semgrep, report only)
+    if: inputs.mode == 'full'
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # On the CI VM a heavy step waits for /srv/ci/.lock, the one-check-at-a-time lock that
+      # ci-run and the app runners share (12 GB VM). The shared test runner does not take it
+      # itself (images session, 11-11-2026), so the template does. GitHub's runners skip it.
+      - name: Lock helper (CI VM)
+        run: |
+          cat > "$RUNNER_TEMP/locked" <<'SH'
+          #!/usr/bin/env bash
+          # locked <command...>: runs it under /srv/ci/.lock on a self-hosted runner, at most
+          # 45 minutes waiting (exit 75 from flock means the wait ran out).
+          if [ "${RUNNER_ENVIRONMENT:-}" != self-hosted ]; then exec "$@"; fi
+          echo "Waiting for /srv/ci/.lock (CI VM: one heavy check at a time) ..."
+          flock -w 2700 -E 75 /srv/ci/.lock "$@"
+          rc=$?
+          if [ "$rc" = 75 ]; then echo "::error::Waited 45 minutes for /srv/ci/.lock. Who holds it: sudo fuser -v /srv/ci/.lock on ai-ci (vault runbook \"CI-runner gebruiken en een project toevoegen\")."; fi
+          exit "$rc"
+          SH
+          chmod +x "$RUNNER_TEMP/locked"
+
+      # Python through uv, not actions/setup-python: that has no builds for the Debian 13 CI VM
+      # ("The version '3.12' ... was not found for Debian 13", 11-11-2026). uv's standalone
+      # Pythons run on any Linux; uv itself is pinned by checksum.
+      - name: Python (uv, checksum checked)
+        env:
+          PY: "3.12"
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/uv.tgz" "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$UV_SHA256  $RUNNER_TEMP/uv.tgz" | sha256sum -c - >/dev/null || { echo "::error::uv: checksum does not match"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/uv" && tar -xzf "$RUNNER_TEMP/uv.tgz" -C "$RUNNER_TEMP/uv" --strip-components=1
+          UV_PYTHON_PREFERENCE=only-managed UV_PYTHON_INSTALL_DIR="$RUNNER_TEMP/uv-python" UV_CACHE_DIR="$RUNNER_TEMP/uv-cache" \
+            "$RUNNER_TEMP/uv/uv" venv --quiet --seed --python "$PY" "$RUNNER_TEMP/python"
+          echo "$RUNNER_TEMP/python/bin" >> "$GITHUB_PATH"
+
+      # Report only: the first findings need a human look before they can block anything.
+      # --metrics=off: nothing about this code goes to Semgrep.
+      - name: Semgrep
+        env:
+          CONFIGS: ${{ inputs.semgrep-config }}
+        run: |
+          python -m venv "$RUNNER_TEMP/semgrep" && "$RUNNER_TEMP/semgrep/bin/pip" install -q "semgrep==$SEMGREP_VERSION"
+          args=(); for c in $CONFIGS; do args+=(--config "$c"); done
+          "$RUNNER_TEMP/locked" "$RUNNER_TEMP/semgrep/bin/semgrep" scan --metrics=off "${args[@]}" \
+            --exclude node_modules --exclude .next --exclude dist \
+            --sarif-output=semgrep.sarif || echo "::warning::Semgrep reported findings or failed; see the log and the semgrep artifact."
+
+      - name: Keep the Semgrep report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep-${{ github.sha }}
+          path: semgrep.sarif
+          if-no-files-found: ignore
+          retention-days: 30
