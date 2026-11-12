@@ -1,0 +1,14 @@
+# gitleaks settings for this repo (used by the shared CI checks and the Mac hook).
+# Reviewed 12-11-2026: both hits are not secrets. src/lib/crypto.ts (until June 2026) had a
+# fixed scrypt salt next to SESSION_SECRET, which is the real secret and lives only on the
+# server; the plan in docs/ matched on a list of function names.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fixed scrypt salt and a list of function names"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^src/lib/crypto\.ts$''',
+  '''^docs/superpowers/plans/2026-07-02-urenlijst-rebuild\.md$''',
+]
