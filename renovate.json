@@ -1,0 +1,16 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["local>JappertjeV/ci-workflows"],
+  "packageRules": [
+    {
+      "description": "Copies of JappertjeV/ci-workflows (a public repo cannot call a reusable workflow from a private repo). They are replaced as a whole from there, never bumped here, or they would drift from the source.",
+      "matchFileNames": [
+        ".github/workflows/node-check.yml",
+        ".github/workflows/security.yml",
+        ".github/workflows/main-guard.yml",
+        ".github/workflows/pr-description.yml"
+      ],
+      "enabled": false
+    }
+  ]
+}
