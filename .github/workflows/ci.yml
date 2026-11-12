@@ -1,8 +1,8 @@
 # Shared checks from JappertjeV/ci-workflows (plan "GitOps en CI"), on GitHub's runners.
 # GitHub lets only private repos call a reusable workflow from a private repo, so this public
 # repo has exact copies of node-check, security, main-guard and pr-description next to this
-# file. Never edit those copies here: replace them from ci-workflows (its prive/README.md);
-# a weekly check there reports when they differ.
+# file. Never edit those copies here: replace them from ci-workflows after each new version
+# (steps in its prive/README.md and the vault note "ci-workflows (privé)").
 name: ci
 
 on:
